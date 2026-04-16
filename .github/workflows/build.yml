@@ -1,0 +1,37 @@
+name: build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build_test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.21', '1.22']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Install xk6 tool
+        run: go install go.k6.io/xk6/cmd/xk6@latest
+
+      - name: Run go fmt
+        run: if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then exit 1; fi
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Run Unit Tests
+        run: go test -v -race ./...
+
+      - name: Build custom k6 binary
+        run: xk6 build --with github.com/xk6-sip-media=.

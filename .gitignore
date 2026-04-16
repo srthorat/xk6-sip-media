@@ -1,0 +1,44 @@
+# Binaries
+*-dev
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+k6
+xk6-sip-media
+
+# Test binaries, profiling data, test logs
+*.test
+*.prof
+*.out
+*.log
+
+# Dependency directories
+vendor/
+
+# Environment files
+.env
+.env.local
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Go build cache
+*.o
+*.a
+*.cgo1.go
+*.cgo2.c
+_cgo_defun.c
+_cgo_gotypes.go
+_cgo_export.*
+
+# Audio generation and temp files
+examples/audio/sample*.wav
+examples/audio/*.mp3
+*.pcap

@@ -1,0 +1,285 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "xk6-sip-media Prometheus datasource",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0" },
+    { "type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0" },
+    { "type": "panel", "id": "timeseries", "name": "Time series", "version": "" },
+    { "type": "panel", "id": "gauge", "name": "Gauge", "version": "" },
+    { "type": "panel", "id": "stat", "name": "Stat", "version": "" },
+    { "type": "panel", "id": "table", "name": "Table", "version": "" }
+  ],
+  "annotations": { "list": [] },
+  "description": "xk6-sip-media SIP + RTP Load Test Dashboard",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "🔵 Overview",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "green" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }] },
+          "mappings": [],
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "id": 1,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "background", "graphMode": "none" },
+      "title": "✅ Calls Succeeded",
+      "type": "stat",
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(k6_sip_call_success_total)", "legendFormat": "Success" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 5 }, { "color": "red", "value": 20 }] },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "id": 2,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "title": "❌ Calls Failed",
+      "type": "stat",
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(k6_sip_call_failure_total)", "legendFormat": "Failures" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 3.0 }, { "color": "green", "value": 4.0 }] },
+          "unit": "short",
+          "decimals": 2
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "id": 3,
+      "options": { "reduceOptions": { "calcs": ["mean"] }, "colorMode": "background", "graphMode": "none" },
+      "title": "🎙️ Avg MOS Score",
+      "type": "stat",
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "avg(k6_mos_score)", "legendFormat": "MOS" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 30 }, { "color": "red", "value": 80 }] },
+          "unit": "ms",
+          "decimals": 1
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "id": 4,
+      "options": { "reduceOptions": { "calcs": ["mean"] }, "colorMode": "background", "graphMode": "none" },
+      "title": "⏱️ Avg Jitter",
+      "type": "stat",
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "avg(k6_rtp_jitter_ms)", "legendFormat": "Jitter" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 }] },
+          "unit": "percentunit",
+          "decimals": 2
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+      "id": 5,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "title": "📦 Packet Loss %",
+      "type": "stat",
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(k6_rtp_packets_lost_total) / (sum(k6_rtp_packets_sent_total) + 0.001)", "legendFormat": "Loss%" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 500 }, { "color": "red", "value": 2000 }] },
+          "unit": "ms"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "id": 6,
+      "options": { "reduceOptions": { "calcs": ["p95"] }, "colorMode": "background", "graphMode": "none" },
+      "title": "📞 p95 Call Duration",
+      "type": "stat",
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.95, sum(rate(k6_sip_call_duration_milliseconds_bucket[1m])) by (le))", "legendFormat": "p95" }]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 101,
+      "title": "📊 Call Rate & Volume",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "unit": "cps" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Success" }, "properties": [{ "id": "color", "value": { "fixedColor": "#73BF69", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Failed" }, "properties": [{ "id": "color", "value": { "fixedColor": "#F2495C", "mode": "fixed" } }] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 10,
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "title": "Calls Per Second (success vs failure)",
+      "type": "timeseries",
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "rate(k6_sip_call_success_total[30s])", "legendFormat": "Success" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "rate(k6_sip_call_failure_total[30s])", "legendFormat": "Failed" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "ms" } },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 11,
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "title": "Call Duration Percentiles",
+      "type": "timeseries",
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.50, sum(rate(k6_sip_call_duration_milliseconds_bucket[1m])) by (le))", "legendFormat": "p50" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.95, sum(rate(k6_sip_call_duration_milliseconds_bucket[1m])) by (le))", "legendFormat": "p95" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.99, sum(rate(k6_sip_call_duration_milliseconds_bucket[1m])) by (le))", "legendFormat": "p99" }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "id": 102,
+      "title": "🎙️ Voice Quality (MOS, Jitter, Loss)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "red", "value": 1 }, { "color": "orange", "value": 2.5 }, { "color": "yellow", "value": 3.5 }, { "color": "green", "value": 4.0 }] },
+          "unit": "short",
+          "min": 1, "max": 5,
+          "decimals": 2
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 15 },
+      "id": 20,
+      "options": { "reduceOptions": { "calcs": ["mean"] }, "orientation": "horizontal", "showThresholdLabels": true, "showThresholdMarkers": true },
+      "title": "MOS Score Distribution",
+      "type": "gauge",
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "avg(k6_mos_score)", "legendFormat": "Avg MOS" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "ms" } },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 15 },
+      "id": 21,
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "title": "RTP Jitter (ms) Over Time",
+      "type": "timeseries",
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "avg(k6_rtp_jitter_ms)", "legendFormat": "Avg Jitter" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.95, sum(rate(k6_rtp_jitter_ms_bucket[1m])) by (le))", "legendFormat": "p95 Jitter" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "unit": "pps" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Sent" }, "properties": [{ "id": "color", "value": { "fixedColor": "#5794F2", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Received" }, "properties": [{ "id": "color", "value": { "fixedColor": "#73BF69", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Lost" }, "properties": [{ "id": "color", "value": { "fixedColor": "#F2495C", "mode": "fixed" } }] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 15 },
+      "id": 22,
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "title": "RTP Packet Rate (sent / received / lost)",
+      "type": "timeseries",
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "rate(k6_rtp_packets_sent_total[30s])", "legendFormat": "Sent" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "rate(k6_rtp_packets_received_total[30s])", "legendFormat": "Received" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "rate(k6_rtp_packets_lost_total[30s])", "legendFormat": "Lost" }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "id": 103,
+      "title": "🔐 SIP Operations (Register, Transfer, Conference)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "ops" } },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 },
+      "id": 30,
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "title": "SIP REGISTER Rate",
+      "type": "timeseries",
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "rate(k6_sip_register_success_total[30s])", "legendFormat": "Success" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "rate(k6_sip_auth_bypass_total[30s])", "legendFormat": "Auth Bypass" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "ops" } },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
+      "id": 31,
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "title": "SIP Transfer Rate (Blind + Attended)",
+      "type": "timeseries",
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "rate(k6_sip_transfer_success_total[30s])", "legendFormat": "Transfers" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" } },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
+      "id": 32,
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "title": "Conference Legs Over Time",
+      "type": "timeseries",
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "avg(k6_sip_conference_legs)", "legendFormat": "Avg Legs" }]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "tags": ["sip", "voip", "k6", "rtp", "load-test"],
+  "templating": { "list": [] },
+  "time": { "from": "now-30m", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "xk6-sip-media Load Test",
+  "uid": "xk6sipmedia01",
+  "version": 1
+}
