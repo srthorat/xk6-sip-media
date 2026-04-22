@@ -5,7 +5,7 @@
 *.dll
 *.so
 *.dylib
-k6
+/k6
 xk6-sip-media
 
 # Test binaries, profiling data, test logs
