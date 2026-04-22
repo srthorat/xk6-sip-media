@@ -102,18 +102,16 @@ func ParseSDP(body string) (ip string, port int, ptMap map[uint8]string) {
 		}
 	}
 
-	// Statically inject default profiles if missing from remote answer (per RFC 3551)
+	// Statically inject PCMU and PCMA defaults if missing from remote answer.
+	// PT 0 (PCMU) and PT 8 (PCMA) are statically assigned by RFC 3551 §6.
+	// PT 9 (G722) and PT 18 (G729) are also statically assigned but should
+	// only be injected if the remote advertised them in the SDP; injecting
+	// them unconditionally causes codec mismatches with peers that don't support them.
 	if _, ok := ptMap[0]; !ok {
 		ptMap[0] = "PCMU"
 	}
 	if _, ok := ptMap[8]; !ok {
 		ptMap[8] = "PCMA"
-	}
-	if _, ok := ptMap[9]; !ok {
-		ptMap[9] = "G722"
-	}
-	if _, ok := ptMap[18]; !ok {
-		ptMap[18] = "G729"
 	}
 
 	ip = connectionIP

@@ -3,6 +3,7 @@ package rtp
 import (
 	"os"
 	"sync"
+	"sync/atomic"
 )
 
 // AudioRecorder writes raw RTP payloads to a file for post-call analysis
@@ -12,11 +13,12 @@ import (
 // File I/O is performed asynchronously via a background goroutine so that
 // callers in the reactor hot-path (Tick) are never blocked by disk latency.
 type AudioRecorder struct {
-	file       *os.File
-	mu         sync.Mutex
-	buf        []byte        // accumulated raw payload bytes (in-memory, always synchronous)
-	writeCh    chan []byte   // async channel to background file-writer goroutine
-	writerDone chan struct{} // closed when background goroutine exits
+	file          *os.File
+	mu            sync.Mutex
+	buf           []byte        // accumulated raw payload bytes (in-memory, always synchronous)
+	writeCh       chan []byte   // async channel to background file-writer goroutine
+	writerDone    chan struct{} // closed when background goroutine exits
+	DroppedFrames atomic.Int64  // incremented when writeCh is full and a frame is dropped
 }
 
 // NewRecorder creates an AudioRecorder that writes to the given path.
@@ -63,7 +65,8 @@ func (r *AudioRecorder) Write(payload []byte) {
 		case r.writeCh <- cp:
 		default:
 			// Channel full: drop rather than block the reactor shard.
-			// This is a best-effort write; PESQ analysis may show minor gaps.
+			// DroppedFrames is visible in CallResult for diagnostics.
+			r.DroppedFrames.Add(1)
 		}
 	}
 }

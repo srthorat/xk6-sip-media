@@ -21,8 +21,12 @@ type JitterBuffer struct {
 	// used to synthesize PLC silence frames. 0 means skip PLC writes (e.g. Opus).
 	silenceSize int
 
-	stop chan struct{}
-	wg   sync.WaitGroup
+	// Playout-delay state: hold packets until playoutDelay has elapsed.
+	firstPktTime time.Time
+	delayExpired bool
+
+	closeOnce sync.Once
+	stop      chan struct{}
 }
 
 // NewJitterBuffer initializes an adaptive buffer.
@@ -54,6 +58,8 @@ func (jb *JitterBuffer) Push(pkt *pionrtp.Packet) {
 	if !jb.started {
 		jb.nextSeq = pkt.SequenceNumber
 		jb.started = true
+		jb.firstPktTime = time.Now()
+		jb.delayExpired = jb.playoutDelay == 0
 	}
 
 	// Drop only packets we've already played — they are truly late.
@@ -78,20 +84,25 @@ func (jb *JitterBuffer) Tick() bool {
 
 	select {
 	case <-jb.stop:
-		// Flush remaining and remove from reactor
-		for len(jb.packets) > 0 {
-			if pkt, ok := jb.packets[jb.nextSeq]; ok {
-				jb.recorder.Write(pkt.Payload)
-				delete(jb.packets, jb.nextSeq)
-			}
-			jb.nextSeq++
+		// Flush remaining packets without iterating up to 65535 gaps.
+		for _, pkt := range jb.packets {
+			jb.recorder.Write(pkt.Payload)
 		}
+		jb.packets = nil
 		return false // Signal removal
 	default:
 	}
 
 	if !jb.started {
 		return true // keep trying
+	}
+
+	// Honour playout delay: hold packets until the configured duration has elapsed.
+	if !jb.delayExpired {
+		if time.Since(jb.firstPktTime) < jb.playoutDelay {
+			return true
+		}
+		jb.delayExpired = true
 	}
 
 	// Check if the exact expected sequential packet has arrived
@@ -110,6 +121,7 @@ func (jb *JitterBuffer) Tick() bool {
 }
 
 // Close gracefully terminates the JitterBuffer and flushes remaining frames.
+// Safe to call multiple times — only the first call has effect.
 func (jb *JitterBuffer) Close() {
-	close(jb.stop)
+	jb.closeOnce.Do(func() { close(jb.stop) })
 }

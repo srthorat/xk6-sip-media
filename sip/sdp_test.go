@@ -94,3 +94,79 @@ func TestParseSDP_DynamicPtMap(t *testing.T) {
 		t.Errorf("expected ptMap[0]=PCMU, got %q", ptMap[0])
 	}
 }
+
+// TestParseSDP_NoStaticG722Injection verifies that PT 9 (G722) is NOT injected
+// when the remote SDP does not advertise it. Injecting G722 unconditionally causes
+// codec mismatches with peers that don't support it.
+func TestParseSDP_NoStaticG722Injection(t *testing.T) {
+	// SDP with only PCMU — G722 is NOT offered by the remote.
+	sdp := "v=0\r\n" +
+		"o=- 0 0 IN IP4 192.168.1.1\r\n" +
+		"s=test\r\n" +
+		"c=IN IP4 192.168.1.1\r\n" +
+		"t=0 0\r\n" +
+		"m=audio 5000 RTP/AVP 0\r\n" +
+		"a=rtpmap:0 PCMU/8000\r\n"
+
+	_, _, ptMap := sipcall.ParseSDP(sdp)
+
+	if _, ok := ptMap[9]; ok {
+		t.Errorf("ParseSDP should NOT inject PT 9 (G722) when not offered by remote; got ptMap[9]=%q", ptMap[9])
+	}
+}
+
+// TestParseSDP_NoStaticG729Injection verifies that PT 18 (G729) is NOT injected
+// when the remote SDP does not advertise it.
+func TestParseSDP_NoStaticG729Injection(t *testing.T) {
+	sdp := "v=0\r\n" +
+		"o=- 0 0 IN IP4 192.168.1.1\r\n" +
+		"s=test\r\n" +
+		"c=IN IP4 192.168.1.1\r\n" +
+		"t=0 0\r\n" +
+		"m=audio 5000 RTP/AVP 0\r\n" +
+		"a=rtpmap:0 PCMU/8000\r\n"
+
+	_, _, ptMap := sipcall.ParseSDP(sdp)
+
+	if _, ok := ptMap[18]; ok {
+		t.Errorf("ParseSDP should NOT inject PT 18 (G729) when not offered by remote; got ptMap[18]=%q", ptMap[18])
+	}
+}
+
+// TestParseSDP_G722PresentWhenOffered verifies that G722 IS present in ptMap when
+// the remote actually offers it in the SDP.
+func TestParseSDP_G722PresentWhenOffered(t *testing.T) {
+	sdp := "v=0\r\n" +
+		"o=- 0 0 IN IP4 10.0.0.1\r\n" +
+		"s=test\r\n" +
+		"c=IN IP4 10.0.0.1\r\n" +
+		"t=0 0\r\n" +
+		"m=audio 5006 RTP/AVP 0 9\r\n" +
+		"a=rtpmap:0 PCMU/8000\r\n" +
+		"a=rtpmap:9 G722/8000\r\n"
+
+	_, _, ptMap := sipcall.ParseSDP(sdp)
+
+	if ptMap[9] != "G722" {
+		t.Errorf("G722 offered in SDP but not in ptMap: %v", ptMap)
+	}
+}
+
+// TestParseSDP_PCMUAlwaysPresent verifies that PCMU (PT 0) is always in the map
+// even if the remote SDP forgot to include it (RFC 3551 requires it).
+func TestParseSDP_PCMUAlwaysPresent(t *testing.T) {
+	// SDP with only PCMA — PCMU must still be injected as a safe default.
+	sdp := "v=0\r\n" +
+		"o=- 0 0 IN IP4 10.0.0.1\r\n" +
+		"s=test\r\n" +
+		"c=IN IP4 10.0.0.1\r\n" +
+		"t=0 0\r\n" +
+		"m=audio 5000 RTP/AVP 8\r\n" +
+		"a=rtpmap:8 PCMA/8000\r\n"
+
+	_, _, ptMap := sipcall.ParseSDP(sdp)
+
+	if ptMap[0] != "PCMU" {
+		t.Errorf("PCMU (PT 0) should always be injected as RFC 3551 default; ptMap=%v", ptMap)
+	}
+}

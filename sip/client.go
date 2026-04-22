@@ -173,14 +173,11 @@ func localOutboundIP() (string, error) {
 	return conn.LocalAddr().(*net.UDPAddr).IP.String(), nil
 }
 
-// resolveLocalIP returns localIP if it is not "0.0.0.0" or empty,
-// otherwise auto-detects the outbound interface IP.
+// resolveLocalIP returns localIP if non-empty and not a wildcard,
+// otherwise auto-detects the outbound interface IP (IPv4 only).
+// It delegates to resolveLocalIPAuto which handles both IPv4 and IPv6 wildcards.
 func resolveLocalIP(localIP string) string {
-	if localIP != "" && localIP != "0.0.0.0" {
-		return localIP
-	}
-	ip, _ := localOutboundIP()
-	return ip
+	return resolveLocalIPAuto(localIP, false)
 }
 
 // makeFromURI constructs a SIP from URI for the given local host.

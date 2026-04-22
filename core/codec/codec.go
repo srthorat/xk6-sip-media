@@ -22,7 +22,7 @@ type Codec interface {
 
 // New returns a Codec by name. Returns (nil, error) for unknown codecs or
 // when a CGO codec fails to initialize (e.g. missing libopus).
-// Supported: "PCMU", "PCMA", "G722", "OPUS".
+// Supported: "PCMU", "PCMA", "G722", "OPUS", "G729" (build with -tags g729).
 // G729 requires building with -tags g729.
 func New(name string) (Codec, error) {
 	switch name {
@@ -37,7 +37,7 @@ func New(name string) (Codec, error) {
 	case "G729":
 		return newG729() // Uses build tags for optional GPL linking
 	default:
-		return nil, fmt.Errorf("unknown codec %q (supported: PCMU, PCMA, G722, OPUS)", name)
+		return nil, fmt.Errorf("unknown codec %q (supported: PCMU, PCMA, G722, OPUS, G729)", name)
 	}
 }
 

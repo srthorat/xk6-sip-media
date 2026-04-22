@@ -40,7 +40,9 @@ func Receive(conn *net.UDPConn, stats *RTPStats, recorder *AudioRecorder, silenc
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				continue
 			}
-			continue // other errors: log in production, ignore here
+			// Non-timeout error (e.g. EMSGSIZE, ECONNREFUSED): count and continue.
+			stats.RecvErrors.Add(1)
+			continue
 		}
 
 		var pkt pionrtp.Packet

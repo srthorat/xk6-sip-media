@@ -68,8 +68,8 @@ func (m *SIPModule) Register(opts map[string]interface{}) *K6Registration {
 	if v, ok := opts["password"].(string); ok {
 		cfg.Password = v
 	}
-	if v, ok := opts["expires"].(int64); ok {
-		cfg.Expires = int(v)
+	if v := toInt(opts["expires"]); v > 0 {
+		cfg.Expires = v
 	}
 	if v, ok := opts["localIP"].(string); ok {
 		cfg.LocalIP = v
@@ -257,11 +257,21 @@ func parseCfg(opts map[string]interface{}) sipcall.CallConfig {
 			}
 		}
 	}
+	if v, ok := opts["dtmfInitialDelay"].(string); ok {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.DTMFInitialDelay = d
+		}
+	}
+	if v, ok := opts["dtmfInterDigitGap"].(string); ok {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.DTMFInterDigitGap = d
+		}
+	}
 	if v, ok := opts["localIP"].(string); ok && v != "" {
 		cfg.LocalIP = v
 	}
-	if v, ok := opts["rtpPort"].(int64); ok {
-		cfg.RTPPort = int(v)
+	if v := toInt(opts["rtpPort"]); v > 0 {
+		cfg.RTPPort = v
 	}
 	if v, ok := opts["pesq"].(bool); ok {
 		cfg.EnablePESQ = v
@@ -277,8 +287,8 @@ func parseCfg(opts map[string]interface{}) sipcall.CallConfig {
 	if v, ok := opts["transport"].(string); ok && v != "" {
 		cfg.Transport = v
 	}
-	if v, ok := opts["sipPort"].(int64); ok && v > 0 {
-		cfg.SIPPort = int(v)
+	if v := toInt(opts["sipPort"]); v > 0 {
+		cfg.SIPPort = v
 	}
 
 	// ── TLS options ───────────────────────────────────────────────────────
@@ -398,5 +408,23 @@ func (m *SIPModule) emitAndReturn(
 		"pesq_mos":             result.PESQScore,
 		"ivr_ok":               result.IVRValid,
 		"transfer_ok":          result.TransferOK,
+		"recv_errors":          result.RecvErrors,
+		"recorder_drops":       result.RecorderDrops,
 	}
+}
+
+// toInt converts a JS number value to int regardless of whether Goja emitted
+// it as int64, float64, int, or int32. Returns 0 if the type is unrecognised.
+func toInt(v interface{}) int {
+	switch x := v.(type) {
+	case int64:
+		return int(x)
+	case float64:
+		return int(x)
+	case int:
+		return x
+	case int32:
+		return int(x)
+	}
+	return 0
 }

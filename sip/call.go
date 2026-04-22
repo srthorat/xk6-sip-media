@@ -35,8 +35,15 @@ type CallConfig struct {
 	Duration time.Duration
 
 	// DTMFSequence is an ordered list of DTMF digits sent after connection.
-	// Each digit waits 2 seconds before being sent (configurable in Dial).
 	DTMFSequence []string
+
+	// DTMFInitialDelay is the pause before the first digit is sent.
+	// Defaults to 2s when zero.
+	DTMFInitialDelay time.Duration
+
+	// DTMFInterDigitGap is the pause between consecutive digits.
+	// Defaults to 2s when zero.
+	DTMFInterDigitGap time.Duration
 
 	// LocalIP overrides the auto-detected outbound IP address.
 	LocalIP string

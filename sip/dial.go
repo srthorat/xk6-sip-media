@@ -354,7 +354,7 @@ func Dial(cfg CallConfig) (*CallHandle, error) {
 	if cfg.RTCP {
 		rtcpLocal := &net.UDPAddr{IP: net.ParseIP(bindIP), Port: rtpPort + 1}
 		rtcpRemote := &net.UDPAddr{IP: net.ParseIP(remoteIP), Port: remotePort + 1}
-		rtcpSess, err := corertp.NewRTCPSession(rtcpLocal, rtcpRemote, ssrc, h.recvStats, h.sendStats)
+		rtcpSess, err := corertp.NewRTCPSession(rtcpLocal, rtcpRemote, ssrc, uint32(cod.SampleRate()), h.recvStats, h.sendStats)
 		if err == nil {
 			h.rtcpSess = rtcpSess
 			h.wg.Add(1)
@@ -376,11 +376,29 @@ func Dial(cfg CallConfig) (*CallHandle, error) {
 
 	// 20. DTMF sequence
 	if len(cfg.DTMFSequence) > 0 {
+		initialDelay := cfg.DTMFInitialDelay
+		if initialDelay == 0 {
+			initialDelay = 2 * time.Second
+		}
+		interDigitGap := cfg.DTMFInterDigitGap
+		if interDigitGap == 0 {
+			interDigitGap = 2 * time.Second
+		}
 		go func() {
-			time.Sleep(2 * time.Second)
+			// Initial delay before first digit — interruptible on hangup.
+			select {
+			case <-time.After(initialDelay):
+			case <-h.stop:
+				return
+			}
 			for i, digit := range cfg.DTMFSequence {
 				if i > 0 {
-					time.Sleep(2 * time.Second)
+					// Inter-digit gap — interruptible on hangup.
+					select {
+					case <-time.After(interDigitGap):
+					case <-h.stop:
+						return
+					}
 				}
 				h.SendDTMF(digit)
 			}

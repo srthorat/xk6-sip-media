@@ -15,7 +15,7 @@ run: build
 
 test:
 	@echo "Running tests..."
-	go test ./... -v -count=1
+	CGO_ENABLED=1 CGO_LDFLAGS="-Wl,-w" go test -v -race -count=1 ./...
 
 format:
 	@echo "Formatting code..."

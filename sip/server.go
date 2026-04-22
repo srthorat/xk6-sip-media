@@ -248,15 +248,15 @@ func (s *Server) handleInvite(req *sipmsg.Request, tx sipmsg.ServerTransaction) 
 	close(stop)
 	wg.Wait()
 
-	lossPct := recvStats.PacketLossPercent()
-	mos := corertp.CalculateMOS(lossPct, recvStats.Jitter)
+	snap := recvStats.Snapshot()
+	mos := corertp.CalculateMOS(snap.PacketLossPct, snap.Jitter)
 
 	s.mu.Lock()
 	s.results = append(s.results, corertp.CallResult{
-		PacketsSent:     sendStats.PacketsSent,
-		PacketsReceived: recvStats.PacketsReceived,
-		PacketsLost:     recvStats.PacketsLost,
-		Jitter:          recvStats.Jitter,
+		PacketsSent:     int(sendStats.PacketsSent.Load()),
+		PacketsReceived: snap.PacketsReceived,
+		PacketsLost:     snap.PacketsLost,
+		Jitter:          snap.Jitter,
 		MOS:             mos,
 	})
 	s.mu.Unlock()
