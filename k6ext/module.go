@@ -3,6 +3,9 @@
 package k6ext
 
 import (
+	"fmt"
+	"sync"
+
 	"go.k6.io/k6/js/modules"
 )
 
@@ -11,11 +14,17 @@ func init() {
 }
 
 // RootModule is the root k6 module. k6 calls NewModuleInstance per VU.
-type RootModule struct{}
+// Metrics are registered once during the first NewModuleInstance call,
+// which happens in the init phase when InitEnv() is still valid.
+type RootModule struct {
+	metricsOnce sync.Once
+	metrics     *SIPMetrics
+}
 
 // SIPModule is the per-VU module instance exposed to JavaScript.
 type SIPModule struct {
-	vu modules.VU
+	vu      modules.VU
+	metrics *SIPMetrics
 }
 
 // Ensure interfaces are satisfied at compile time.
@@ -25,8 +34,18 @@ var (
 )
 
 // NewModuleInstance returns a new SIPModule for the current VU.
+// Metrics registration is deferred to first invocation so the registry
+// is available (k6 passes a valid InitEnv during the init phase).
 func (r *RootModule) NewModuleInstance(vu modules.VU) modules.Instance {
-	return &SIPModule{vu: vu}
+	r.metricsOnce.Do(func() {
+		reg := vu.InitEnv().Registry
+		var err error
+		r.metrics, err = registerMetrics(reg)
+		if err != nil {
+			panic(fmt.Sprintf("xk6-sip-media: failed to register metrics: %v", err))
+		}
+	})
+	return &SIPModule{vu: vu, metrics: r.metrics}
 }
 
 // Exports returns the JS exports for this module instance.

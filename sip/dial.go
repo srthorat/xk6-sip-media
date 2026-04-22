@@ -43,15 +43,16 @@ func Dial(cfg CallConfig) (*CallHandle, error) {
 	// 3. Select codec
 	var cod codec.Codec
 	if cfg.AudioMode == "pcap" {
-		cod = codec.New("PCMU") // SDP placeholder; actual PT comes from PCAP
+		cod, _ = codec.New("PCMU") // SDP placeholder; actual PT comes from PCAP
 	} else {
 		codecName := cfg.Codec
 		if codecName == "" {
 			codecName = "PCMU"
 		}
-		cod = codec.New(codecName)
-		if cod == nil {
-			return nil, fmt.Errorf("dial: unknown codec %q (supported: PCMU, PCMA, G722)", codecName)
+		var err error
+		cod, err = codec.New(codecName)
+		if err != nil {
+			return nil, fmt.Errorf("dial: codec %q: %w", codecName, err)
 		}
 	}
 
@@ -160,10 +161,19 @@ func Dial(cfg CallConfig) (*CallHandle, error) {
 	var inviteResult *INVITEResult
 	var earlyMedia *EarlyMedia
 
+	inviteOpts := InviteOptions{
+		LocalIP:     localIP,
+		AOR:         cfg.AOR,
+		Username:    cfg.Username,
+		Password:    cfg.Password,
+		DisplayName: cfg.DisplayName,
+		Transport:   transport,
+	}
+
 	if cfg.EarlyMedia {
-		inviteResult, earlyMedia, err = SendINVITEWithEarlyMedia(ctx, sipClient.cache, toURI, sdpOffer, extraHeaders...)
+		inviteResult, earlyMedia, err = SendINVITEWithEarlyMedia(ctx, sipClient.cache, toURI, sdpOffer, inviteOpts, extraHeaders...)
 	} else {
-		inviteResult, err = SendINVITE(ctx, sipClient.cache, toURI, sdpOffer, extraHeaders...)
+		inviteResult, err = SendINVITE(ctx, sipClient.cache, toURI, sdpOffer, inviteOpts, extraHeaders...)
 	}
 	if err != nil {
 		if cfg.CancelAfter > 0 && (ctx.Err() != nil) {
@@ -231,6 +241,22 @@ func Dial(cfg CallConfig) (*CallHandle, error) {
 	ssrc := rand.Uint32()
 	sess := corertp.NewSession(conn, remoteAddr, ssrc)
 
+	// 12.5 Dynamic SDP Payload Negotiation
+	sendPT := cod.PayloadType()
+	if inviteResult.PtMap != nil {
+		for pt, name := range inviteResult.PtMap {
+			if name == cod.Name() {
+				sendPT = pt
+				break
+			}
+		}
+	}
+
+	// RTP timestamp increment per 20ms frame, derived from the codec's native
+	// sample rate: tsIncrement = sampleRate / 1000 * 20
+	// e.g. 8kHz → 160, 16kHz → 320, 48kHz (Opus) → 960
+	tsIncrement := uint32(cod.SampleRate() / 1000 * 20)
+
 	// 13. Create SRTP sessions (if enabled)
 	var srtpSender *corertp.SRTPSession
 	var srtpReceiver *corertp.SRTPSession
@@ -283,12 +309,13 @@ func Dial(cfg CallConfig) (*CallHandle, error) {
 
 	// 16. RTP goroutines
 	h.wg.Add(1)
+	plcSize := plcPayloadSize(cod.Name())
 	go func() {
 		defer h.wg.Done()
 		if srtpReceiver != nil {
-			corertp.ReceiveSRTP(conn, srtpReceiver, h.recvStats, recorder, h.stop)
+			corertp.ReceiveSRTP(conn, srtpReceiver, h.recvStats, recorder, plcSize, h.stop)
 		} else {
-			corertp.Receive(conn, h.recvStats, recorder, h.stop)
+			corertp.Receive(conn, h.recvStats, recorder, plcSize, h.stop)
 		}
 	}()
 
@@ -304,30 +331,23 @@ func Dial(cfg CallConfig) (*CallHandle, error) {
 		silentFrame := make([]byte, 160)
 		silentPayloads := loopPayloads([][]byte{silentFrame}, cfg.Duration)
 		h.wg.Add(1)
-		go func() {
-			defer h.wg.Done()
-			if srtpSender != nil {
-				corertp.StreamSRTP(sess, srtpSender, silentPayloads, cod.PayloadType(), h.sendStats, h.stop)
-			} else {
-				corertp.Stream(sess, silentPayloads, cod.PayloadType(), h.sendStats, h.stop)
-			}
-		}()
+		if srtpSender != nil {
+			corertp.StreamSRTP(sess, srtpSender, silentPayloads, sendPT, tsIncrement, h.sendStats, h.stop, h.wg.Done)
+		} else {
+			corertp.Stream(sess, silentPayloads, sendPT, tsIncrement, h.sendStats, h.stop, h.wg.Done)
+		}
 
 	default:
 		loopedPayloads := loopPayloads(payloads, cfg.Duration)
-		sendPT := cod.PayloadType()
 		if cfg.AudioMode == "pcap" && pcapPayloadType > 0 {
 			sendPT = pcapPayloadType
 		}
 		h.wg.Add(1)
-		go func() {
-			defer h.wg.Done()
-			if srtpSender != nil {
-				corertp.StreamSRTP(sess, srtpSender, loopedPayloads, sendPT, h.sendStats, h.stop)
-			} else {
-				corertp.Stream(sess, loopedPayloads, sendPT, h.sendStats, h.stop)
-			}
-		}()
+		if srtpSender != nil {
+			corertp.StreamSRTP(sess, srtpSender, loopedPayloads, sendPT, tsIncrement, h.sendStats, h.stop, h.wg.Done)
+		} else {
+			corertp.Stream(sess, loopedPayloads, sendPT, tsIncrement, h.sendStats, h.stop, h.wg.Done)
+		}
 	}
 
 	// 17. RTCP goroutine (port rtpPort+1)
@@ -336,6 +356,7 @@ func Dial(cfg CallConfig) (*CallHandle, error) {
 		rtcpRemote := &net.UDPAddr{IP: net.ParseIP(remoteIP), Port: remotePort + 1}
 		rtcpSess, err := corertp.NewRTCPSession(rtcpLocal, rtcpRemote, ssrc, h.recvStats, h.sendStats)
 		if err == nil {
+			h.rtcpSess = rtcpSess
 			h.wg.Add(1)
 			go func() {
 				defer h.wg.Done()

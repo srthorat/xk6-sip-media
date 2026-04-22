@@ -17,8 +17,9 @@ type CodecEncoder interface {
 // RTP payloads for the given codec. It automatically selects the correct
 // sample rate and frame size for the codec.
 //
-//   - PCMU / PCMA: 8 kHz, 160 samples/frame  (20ms)
-//   - G722:       16 kHz, 320 samples/frame  (20ms at 16kHz)
+//   - PCMU / PCMA / G729: 8 kHz,  160 samples/frame  (20ms)
+//   - G722:               16 kHz, 320 samples/frame  (20ms at 16kHz)
+//   - OPUS:               48 kHz, 960 samples/frame  (20ms at 48kHz)
 //
 // Accepts WAV and MP3 — format detected by magic bytes.
 //
@@ -47,9 +48,11 @@ func LoadAudioForCodec(path string, cod CodecEncoder) ([][]byte, error) {
 func rateAndFrameForCodec(name string) (rate, frameSize int) {
 	switch strings.ToUpper(name) {
 	case "G722":
-		return TargetSampleRate16k, 320 // 16kHz × 20ms
+		return TargetSampleRate16k, 320 // 16kHz × 20ms = 320 samples
+	case "OPUS":
+		return TargetSampleRate48k, 960 // 48kHz × 20ms = 960 samples
 	default:
-		// PCMU, PCMA, and any unknown codec → telephony 8kHz
-		return TargetSampleRate8k, FrameSize // 8kHz × 20ms = 160
+		// PCMU, PCMA, G729, and any unknown codec → telephony 8kHz
+		return TargetSampleRate8k, FrameSize // 8kHz × 20ms = 160 samples
 	}
 }

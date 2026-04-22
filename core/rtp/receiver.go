@@ -12,8 +12,17 @@ import (
 //
 // conn must have a read deadline set / reset periodically so the loop can
 // observe stop signals even when no packets arrive.
-func Receive(conn *net.UDPConn, stats *RTPStats, recorder *AudioRecorder, stop <-chan struct{}) {
+//
+// silenceSize is the byte length of one encoded 20ms payload for the active
+// codec, used to synthesize PLC silence on packet loss (0 = skip PLC writes).
+func Receive(conn *net.UDPConn, stats *RTPStats, recorder *AudioRecorder, silenceSize int, stop <-chan struct{}) {
 	buf := make([]byte, 1500)
+
+	var jb *JitterBuffer
+	if recorder != nil {
+		jb = NewJitterBuffer(recorder, 40*time.Millisecond, silenceSize)
+		defer jb.Close()
+	}
 
 	for {
 		select {
@@ -42,8 +51,9 @@ func Receive(conn *net.UDPConn, stats *RTPStats, recorder *AudioRecorder, stop <
 		arrival := time.Now()
 		stats.update(pkt.SequenceNumber, arrival)
 
-		if recorder != nil && len(pkt.Payload) > 0 {
-			recorder.Write(pkt.Payload)
+		if jb != nil && len(pkt.Payload) > 0 {
+			// Push into priority queue, decoupling from synchronous IO
+			jb.Push(&pkt)
 		}
 	}
 }

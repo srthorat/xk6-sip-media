@@ -1,0 +1,35 @@
+# .ai global configuration
+project: xk6-sip-media
+language: go
+go_version: "1.23"
+cgo_required: true
+k6_api: k6/x/sip
+domain: voip-sip-rtp
+
+# Build
+build_command: CGO_ENABLED=1 go build ./...
+test_command: CGO_ENABLED=1 go test -v -race ./...
+
+# Scenario numbering
+next_scenario_number: 33
+scenario_dir: examples/k6/scenarios
+
+# Codecs
+codecs:
+- { name: PCMU, pt: 0, rate: 8000, license: BSD-3 }
+- { name: PCMA, pt: 8, rate: 8000, license: BSD-3 }
+- { name: G722, pt: 9, rate: 8000, license: Own }
+- { name: OPUS, pt: 111, rate: 48000, license: BSD-3 }
+- { name: G729, pt: 18, rate: 8000, license: GPLv3 }
+
+# Intelligence
+intelligence:
+  graphify:
+    command: graphify update .
+    output_dir: .ai/intelligence/graphify/output
+
+# Smoke scripts
+smoke_scripts:
+  baseline: examples/k6/vonage_single_call.js
+  medium: examples/k6/vonage_two_call.js
+  scaled: examples/k6/vonage_ten_call.js

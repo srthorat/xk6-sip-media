@@ -1,10 +1,24 @@
 package sip
 
-// ResponseVars documents the variable-extraction pattern available via CallHandle methods.
-// Use ResponseHeader(), CallID(), FromTag(), ToTag(), etc. on a *CallHandle directly.
+// plcPayloadSize returns the encoded byte length of one 20ms RTP payload for
+// the named codec.  This is used to synthesize codec-correct PLC silence frames
+// in the jitter buffer when a packet is lost.
+//
+// Returns 0 for variable-bitrate compressed codecs (Opus) where zero-fill is
+// not a valid encoded frame — the jitter buffer skips PLC writes in that case.
+func plcPayloadSize(codecName string) int {
+	switch codecName {
+	case "G729":
+		return 20 // 8kHz × 10ms/frame × 2 frames = 20 bytes
+	case "OPUS":
+		return 0 // VBR: cannot synthesize valid silence without encoder
+	default:
+		// PCMU, PCMA, G722: all produce 160-byte 20ms payloads
+		return 160
+	}
+}
 
-// ResponseHeader returns the value of a SIP header from the INVITE 200 OK response.
-// Returns "" if the call has not been answered or the header is absent.
+
 //
 //	const token = call.responseHeader("X-IVR-Session");
 func (h *CallHandle) ResponseHeader(name string) string {

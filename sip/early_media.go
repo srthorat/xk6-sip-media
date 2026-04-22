@@ -26,14 +26,15 @@ func SendINVITEWithEarlyMedia(
 	cache *sipgo.DialogClientCache,
 	toURI sipmsg.Uri,
 	sdpBody string,
+	inviteOpts InviteOptions,
 	extraHeaders ...sipmsg.Header,
 ) (*INVITEResult, *EarlyMedia, error) {
-	var firstHdr sipmsg.Header
-	if len(extraHeaders) > 0 {
-		firstHdr = extraHeaders[0]
+	req, err := buildInviteRequest(toURI, sdpBody, inviteOpts, extraHeaders...)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	dialog, err := cache.Invite(ctx, toURI, []byte(sdpBody), firstHdr)
+	dialog, err := cache.WriteInvite(ctx, req)
 	if err != nil {
 		return nil, nil, fmt.Errorf("sip invite: %w", err)
 	}
@@ -43,9 +44,11 @@ func SendINVITEWithEarlyMedia(
 	// AnswerOptions.OnResponse is called for every response including 1xx.
 	// We intercept 183 here to capture the provisional SDP.
 	answerOpts := sipgo.AnswerOptions{
+		Username: inviteOpts.Username,
+		Password: inviteOpts.Password,
 		OnResponse: func(resp *sipmsg.Response) error {
 			if resp.StatusCode == 183 && len(resp.Body()) > 0 {
-				ip, port := ParseSDP(string(resp.Body()))
+				ip, port, _ := ParseSDP(string(resp.Body()))
 				if ip != "" && port != 0 {
 					em := &EarlyMedia{
 						RemoteIP:   ip,
@@ -84,7 +87,7 @@ func SendINVITEWithEarlyMedia(
 		return nil, nil, fmt.Errorf("sip ack: %w", err)
 	}
 
-	remoteIP, remotePort := ParseSDP(string(resp.Body()))
+	remoteIP, remotePort, ptMap := ParseSDP(string(resp.Body()))
 	if remoteIP == "" || remotePort == 0 {
 		return nil, nil, fmt.Errorf("sip invite: could not parse remote RTP address from 200 OK SDP")
 	}
@@ -93,6 +96,7 @@ func SendINVITEWithEarlyMedia(
 		Dialog:     dialog,
 		RemoteIP:   remoteIP,
 		RemotePort: remotePort,
+		PtMap:      ptMap,
 	}, early, nil
 }
 

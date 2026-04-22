@@ -146,15 +146,15 @@ func (s *Server) handleInvite(req *sipmsg.Request, tx sipmsg.ServerTransaction) 
 		}()
 	}
 
-	cod := codec.New(s.cfg.Codec)
-	if cod == nil {
+	cod, err := codec.New(s.cfg.Codec)
+	if err != nil {
 		_ = tx.Respond(sipmsg.NewResponseFromRequest(req, 415, "Unsupported Media Type", nil))
 		return
 	}
 
 	// Parse caller's SDP offer
 	remoteSDP := string(req.Body())
-	remoteIP, remotePort := ParseSDP(remoteSDP)
+	remoteIP, remotePort, _ := ParseSDP(remoteSDP)
 	if remoteIP == "" || remotePort == 0 {
 		_ = tx.Respond(sipmsg.NewResponseFromRequest(req, 400, "Bad SDP", nil))
 		return
@@ -210,20 +210,17 @@ func (s *Server) handleInvite(req *sipmsg.Request, tx sipmsg.ServerTransaction) 
 		if s.cfg.EchoMode {
 			corertp.Echo(conn, remoteAddr, recvStats, stop)
 		} else {
-			corertp.Receive(conn, recvStats, recorder, stop)
+			corertp.Receive(conn, recvStats, recorder, plcPayloadSize(cod.Name()), stop)
 		}
 	}()
 
-	// Sender goroutine (only when audio file provided and not echo mode)
+	// Sender: register onto MediaReactor (no blocking goroutine needed)
 	if s.cfg.AudioFile != "" && !s.cfg.EchoMode {
-		payloads, err := audio.LoadWAVAsPayloads(s.cfg.AudioFile)
+		payloads, err := audio.LoadAudioForCodec(s.cfg.AudioFile, cod)
 		if err == nil {
 			looped := loopPayloads(payloads, s.cfg.CallDuration)
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				corertp.Stream(sess, looped, cod.PayloadType(), sendStats, stop)
-			}()
+			tsIncrement := uint32(cod.SampleRate() / 1000 * 20)
+			corertp.Stream(sess, looped, cod.PayloadType(), tsIncrement, sendStats, stop, nil)
 		}
 	}
 

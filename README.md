@@ -115,6 +115,12 @@ cd examples/audio && bash generate_sample.sh
 SIP_TARGET="sip:ivr@192.168.1.100" ./k6 run examples/k6/scenarios/01_baseline.js
 ```
 
+## Vonage Smoke Scripts
+
+- `examples/k6/vonage_single_call.js` — 1 call, 20 seconds, `examples/audio/hard.wav`, MOS > 3.8
+- `examples/k6/vonage_two_call.js` — 2 concurrent calls, 20 seconds each, same RTP / MOS checks
+- `examples/k6/vonage_ten_call.js` — 10 concurrent calls, 20 seconds each, same RTP / MOS checks
+
 ---
 
 ## Complete API Reference
@@ -504,11 +510,18 @@ k6 cloud examples/k6/scenarios/05_soak.js
 | File | Description |
 |---|---|
 | `call.js` | Minimal single-call example |
+| `register_only.js` | Register only example |
+| `register_call.js` | Register then call |
+| `ivr_flow.js` | IVR + AI transcript validation |
+| `vonage_direct_call.js` | Vonage direct call without prior REGISTER |
+| `vonage_ivr_flow.js` | Vonage IVR flow: dial 443362, send DTMF 1, then BYE |
+
+### Advanced scenarios (non-numbered)
+| File | Description |
+|---|---|
 | `conference.js` | Conference bridge example |
 | `transfer_blind.js` | Blind transfer example |
 | `transfer_attended.js` | Attended transfer example |
-| `register_call.js` | Register then call |
-| `ivr_flow.js` | IVR + AI transcript validation |
 
 ---
 

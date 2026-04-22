@@ -6,7 +6,7 @@
 package metrics
 
 import (
-	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"sync"
@@ -63,9 +63,9 @@ func Init() {
 		http.Handle("/metrics", promhttp.Handler())
 		go func() {
 			if err := http.ListenAndServe(addr, nil); err != nil {
-				fmt.Fprintf(os.Stderr, "prometheus: %v\n", err)
+				log.Printf("[prometheus] server error: %v", err)
 			}
 		}()
-		fmt.Printf("[prometheus] metrics at http://localhost%s/metrics\n", addr)
+		log.Printf("[prometheus] metrics at http://localhost%s/metrics", addr)
 	})
 }

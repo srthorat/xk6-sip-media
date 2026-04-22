@@ -315,50 +315,97 @@ func indexByte(s string, c byte) int {
 // ── SRTP-aware Stream ─────────────────────────────────────────────────────
 
 // StreamSRTP sends pre-encoded payloads as SRTP packets (encrypted + authenticated).
-// Functionally equivalent to Stream() but wraps each packet with AES-CM-128-HMAC-SHA1-80.
-func StreamSRTP(sess *Session, srtp *SRTPSession, payloads [][]byte, pt uint8, stats *SendStats, stop <-chan struct{}) {
-	ticker := time.NewTicker(20 * time.Millisecond)
-	defer ticker.Stop()
-
-	for _, payload := range payloads {
-		select {
-		case <-stop:
-			return
-		case <-ticker.C:
-		}
-
-		seq, ts := sess.NextSeqTS(160)
-
-		pkt := &pionrtp.Packet{
-			Header: pionrtp.Header{
-				Version:        2,
-				PayloadType:    pt,
-				SequenceNumber: seq,
-				Timestamp:      ts,
-				SSRC:           sess.SSRC,
-			},
-			Payload: payload,
-		}
-
-		raw, err := pkt.Marshal()
-		if err != nil {
-			continue
-		}
-
-		encrypted, err := srtp.EncryptPacket(raw)
-		if err != nil {
-			continue
-		}
-
-		if err := sess.Send(encrypted); err == nil {
-			stats.PacketsSent++
-		}
+// onDone is called exactly once when the stream finishes (exhausted or stopped).
+func StreamSRTP(sess *Session, srtp *SRTPSession, payloads [][]byte, pt uint8, tsIncrement uint32, stats *SendStats, stop <-chan struct{}, onDone func()) {
+	player := &StreamSRTPPlayer{
+		sess:        sess,
+		srtp:        srtp,
+		payloads:    payloads,
+		pt:          pt,
+		stats:       stats,
+		stop:        stop,
+		idx:         0,
+		onDone:      onDone,
+		tsIncrement: tsIncrement,
 	}
+	MediaReactor.Add(player)
+}
+
+type StreamSRTPPlayer struct {
+	sess        *Session
+	srtp        *SRTPSession
+	payloads    [][]byte
+	pt          uint8
+	stats       *SendStats
+	stop        <-chan struct{}
+	idx         int
+	onDone      func()
+	tsIncrement uint32
+}
+
+func (p *StreamSRTPPlayer) Tick() bool {
+	select {
+	case <-p.stop:
+		if p.onDone != nil {
+			p.onDone()
+			p.onDone = nil
+		}
+		return false // Kill stream
+	default:
+	}
+
+	if p.idx >= len(p.payloads) {
+		if p.onDone != nil {
+			p.onDone()
+			p.onDone = nil
+		}
+		return false // Exhausted
+	}
+
+	payload := p.payloads[p.idx]
+	p.idx++
+
+	seq, ts := p.sess.NextSeqTS(p.tsIncrement)
+
+	pkt := &pionrtp.Packet{
+		Header: pionrtp.Header{
+			Version:        2,
+			PayloadType:    p.pt,
+			SequenceNumber: seq,
+			Timestamp:      ts,
+			SSRC:           p.sess.SSRC,
+		},
+		Payload: payload,
+	}
+
+	raw, err := pkt.Marshal()
+	if err != nil {
+		return true 
+	}
+
+	encrypted, err := p.srtp.EncryptPacket(raw)
+	if err != nil {
+		return true
+	}
+
+	if err := p.sess.Send(encrypted); err == nil {
+		p.stats.PacketsSent++
+	}
+
+	return true
 }
 
 // ReceiveSRTP reads SRTP packets, decrypts them, and updates stats.
-func ReceiveSRTP(conn *net.UDPConn, srtp *SRTPSession, stats *RTPStats, recorder *AudioRecorder, stop <-chan struct{}) {
+// silenceSize is the byte length of one encoded 20ms payload for the active
+// codec, used to synthesize PLC silence on packet loss (0 = skip PLC writes).
+func ReceiveSRTP(conn *net.UDPConn, srtp *SRTPSession, stats *RTPStats, recorder *AudioRecorder, silenceSize int, stop <-chan struct{}) {
 	buf := make([]byte, 1500)
+
+	var jb *JitterBuffer
+	if recorder != nil {
+		jb = NewJitterBuffer(recorder, 40*time.Millisecond, silenceSize)
+		defer jb.Close()
+	}
 
 	for {
 		select {
@@ -389,8 +436,8 @@ func ReceiveSRTP(conn *net.UDPConn, srtp *SRTPSession, stats *RTPStats, recorder
 		arrival := time.Now()
 		stats.update(pkt.SequenceNumber, arrival)
 
-		if recorder != nil && len(pkt.Payload) > 0 {
-			recorder.Write(pkt.Payload)
+		if jb != nil && len(pkt.Payload) > 0 {
+			jb.Push(&pkt)
 		}
 	}
 }

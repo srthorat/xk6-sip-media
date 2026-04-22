@@ -27,8 +27,17 @@ func BuildSDP(localIP string, rtpPort int, payloadType uint8) string {
 // BuildSDPWithDirection constructs a minimal SDP offer body with a specific direction.
 func BuildSDPWithDirection(localIP string, rtpPort int, payloadType uint8, direction string) string {
 	codecName := "PCMU"
-	if payloadType == 8 {
+	clockRate := 8000
+	switch payloadType {
+	case 8:
 		codecName = "PCMA"
+	case 9:
+		codecName = "G722"
+	case 18:
+		codecName = "G729"
+	case 111:
+		codecName = "OPUS"
+		clockRate = 48000
 	}
 
 	return fmt.Sprintf(
@@ -38,26 +47,25 @@ func BuildSDPWithDirection(localIP string, rtpPort int, payloadType uint8, direc
 			"c=IN IP4 %s\r\n"+
 			"t=0 0\r\n"+
 			"m=audio %d RTP/AVP %d\r\n"+
-			"a=rtpmap:%d %s/8000\r\n"+
+			"a=rtpmap:%d %s/%d\r\n"+
 			"a=ptime:20\r\n"+
 			"a=%s\r\n",
 		localIP, localIP,
 		rtpPort, payloadType,
-		payloadType, codecName,
+		payloadType, codecName, clockRate,
 		direction,
 	)
 }
 
-// ParseSDP extracts the remote RTP IP and port from an SDP answer body.
-// It handles both CRLF (\r\n) and LF (\n) line endings.
-//
-// Returns ("", 0) if parsing fails (caller should use fallback or error out).
-func ParseSDP(body string) (ip string, port int) {
+// ParseSDP extracts the remote RTP IP, port, and dynamic codec mapping from an SDP answer.
+// Returns an empty IP/0 port if parsing critically fails.
+func ParseSDP(body string) (ip string, port int, ptMap map[uint8]string) {
 	// Normalise line endings
 	body = strings.ReplaceAll(body, "\r\n", "\n")
 	lines := strings.Split(body, "\n")
 
 	var connectionIP string
+	ptMap = make(map[uint8]string)
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -70,7 +78,7 @@ func ParseSDP(body string) (ip string, port int) {
 			}
 		}
 
-		// m=audio line: "m=audio 5004 RTP/AVP 0"
+		// m=audio line: "m=audio 5004 RTP/AVP 0 101"
 		if strings.HasPrefix(line, "m=audio ") {
 			parts := strings.Fields(line)
 			if len(parts) >= 2 {
@@ -81,9 +89,24 @@ func ParseSDP(body string) (ip string, port int) {
 			}
 		}
 
-		// m-level c= overrides session-level c=
-		// (handle simple case only — no multi-media sections)
+		// a=rtpmap:111 opus/48000/2
+		if strings.HasPrefix(line, "a=rtpmap:") {
+			parts := strings.SplitN(line[9:], " ", 2)
+			if len(parts) == 2 {
+				pt, err := strconv.Atoi(parts[0])
+				if err == nil {
+					codecParts := strings.SplitN(parts[1], "/", 2)
+					ptMap[uint8(pt)] = strings.ToUpper(codecParts[0])
+				}
+			}
+		}
 	}
+
+	// Statically inject default profiles if missing from remote answer (per RFC 3551)
+	if _, ok := ptMap[0]; !ok { ptMap[0] = "PCMU" }
+	if _, ok := ptMap[8]; !ok { ptMap[8] = "PCMA" }
+	if _, ok := ptMap[9]; !ok { ptMap[9] = "G722" }
+	if _, ok := ptMap[18]; !ok { ptMap[18] = "G729" }
 
 	ip = connectionIP
 	return

@@ -199,14 +199,56 @@ func buildRegisterRequest(
 ) (*sipmsg.Request, error) {
 	req := sipmsg.NewRequest(sipmsg.REGISTER, registrar)
 
-	// To: Address of Record
-	req.AppendHeader(sipmsg.NewHeader("To", fmt.Sprintf("<%s>", cfg.AOR)))
+	var aorURI sipmsg.Uri
+	if err := sipmsg.ParseUri(cfg.AOR, &aorURI); err != nil {
+		return nil, fmt.Errorf("register: parse AOR %q: %w", cfg.AOR, err)
+	}
 
-	// Contact: where we can be reached
+	// REGISTER must present the Address of Record in both To and From.
+	// Do not rely on sipgo's fallback From generation, which uses the user-agent
+	// name instead of the SIP account identity.
+	to := sipmsg.ToHeader{
+		Address: sipmsg.Uri{
+			Scheme:    aorURI.Scheme,
+			User:      aorURI.User,
+			Host:      aorURI.Host,
+			Port:      aorURI.Port,
+			UriParams: sipmsg.NewParams(),
+			Headers:   sipmsg.NewParams(),
+		},
+		Params: sipmsg.NewParams(),
+	}
+	from := sipmsg.FromHeader{
+		Address: sipmsg.Uri{
+			Scheme:    aorURI.Scheme,
+			User:      aorURI.User,
+			Host:      aorURI.Host,
+			Port:      aorURI.Port,
+			UriParams: sipmsg.NewParams(),
+			Headers:   sipmsg.NewParams(),
+		},
+		Params: sipmsg.NewParams(),
+	}
+	from.Params.Add("tag", sipmsg.GenerateTagN(16))
+	req.AppendHeader(&from)
+	req.AppendHeader(&to)
+
+	// Contact: extract the username from the AOR so the Contact user matches.
+	// Vonage and many carriers reject REGISTER if the Contact user differs from
+	// the AOR user.
+	contactUser := cfg.Username
+	if contactUser == "" {
+		if err := sipmsg.ParseUri(cfg.AOR, &aorURI); err == nil && aorURI.User != "" {
+			contactUser = aorURI.User
+		}
+	}
+	contactParams := sipmsg.NewParams()
+	contactParams.Add("ob", "")
 	contact := sipmsg.ContactHeader{
 		Address: sipmsg.Uri{
-			User: "k6load",
-			Host: localIP,
+			User:      contactUser,
+			Host:      localIP,
+			UriParams: contactParams,
 		},
 	}
 	req.AppendHeader(&contact)

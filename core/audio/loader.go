@@ -31,6 +31,9 @@ const TargetSampleRate8k = 8000
 // TargetSampleRate16k is the wideband standard (G.722).
 const TargetSampleRate16k = 16000
 
+// TargetSampleRate48k is the Opus / WebRTC standard (48kHz mono).
+const TargetSampleRate48k = 48000
+
 // AudioFile holds decoded + normalised PCM audio ready for RTP encoding.
 type AudioFile struct {
 	Samples    []int16

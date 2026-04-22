@@ -14,6 +14,13 @@ type CallConfig struct {
 	// Target is the SIP URI to call, e.g. "sip:ivr@192.168.1.1".
 	Target string
 
+	// AOR is the caller Address of Record used for INVITE From/Contact identity.
+	// Example: "sip:alice@pbx.example.com".
+	AOR string
+
+	// DisplayName is an optional caller display name for From/Contact headers.
+	DisplayName string
+
 	// AudioFile is the path to the WAV file to stream (8kHz mono PCM16).
 	AudioFile string
 

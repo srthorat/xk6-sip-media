@@ -69,13 +69,17 @@ func (s *RTPStats) update(seq uint16, arrival time.Time) {
 
 // CallResult is the summary returned after a call ends.
 type CallResult struct {
-	PacketsSent     int
-	PacketsReceived int
-	PacketsLost     int
-	Jitter          float64 // average jitter, ms
-	MOS             float64 // E-model estimate
-	PESQScore       float64 // 0 if PESQ not run
-	IVRValid        bool    // IVR validation result
-	SilenceRatio    float64 // fraction of silent received audio
-	TransferOK      bool    // true if REFER was accepted (202)
+	PacketsSent        int
+	PacketsReceived    int
+	PacketsLost        int
+	Jitter             float64 // average jitter, ms
+	PacketLossPct      float64 // RTP packet loss percentage
+	MOS                float64 // E-model estimate
+	PESQScore          float64 // 0 if PESQ not run
+	IVRValid           bool    // IVR validation result
+	SilenceRatio       float64 // fraction of silent received audio
+	RTTMs              float64 // RTCP round-trip time in milliseconds
+	RTCPFractionLost   uint8   // RTCP receiver-report fraction lost
+	RTCPCumulativeLost uint32  // RTCP receiver-report cumulative lost
+	TransferOK         bool    // true if REFER was accepted (202)
 }

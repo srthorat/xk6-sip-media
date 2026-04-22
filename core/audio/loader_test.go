@@ -131,6 +131,30 @@ func TestRateAndFrame_G722(t *testing.T) {
 	}
 }
 
+// TestRateAndFrame_Opus verifies Opus returns 48kHz / 960 samples per 20ms frame.
+// This is a regression test: a missing OPUS case would fall through to 8kHz/160,
+// feeding a 48kHz encoder the wrong frame size and producing silent RTP.
+func TestRateAndFrame_Opus(t *testing.T) {
+	rate, frame := rateAndFrameForCodec("OPUS")
+	if rate != 48000 {
+		t.Errorf("OPUS rate=%d, want 48000", rate)
+	}
+	if frame != 960 {
+		t.Errorf("OPUS frame=%d, want 960 (20ms @ 48kHz)", frame)
+	}
+}
+
+// TestRateAndFrame_G729 verifies G.729 uses 8kHz / 80 samples per 10ms frame.
+func TestRateAndFrame_G729(t *testing.T) {
+	rate, frame := rateAndFrameForCodec("G729")
+	if rate != 8000 {
+		t.Errorf("G729 rate=%d, want 8000", rate)
+	}
+	if frame != 160 {
+		t.Errorf("G729 frame=%d, want 160 (20ms @ 8kHz)", frame)
+	}
+}
+
 func abs(x int) int {
 	if x < 0 {
 		return -x

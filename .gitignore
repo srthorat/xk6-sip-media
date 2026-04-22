@@ -42,3 +42,13 @@ _cgo_export.*
 examples/audio/sample*.wav
 examples/audio/*.mp3
 *.pcap
+
+# Graphify build cache (intermediate LLM extraction artifacts)
+graphify-out/cache/
+
+# MemPalace local config (palace data lives in ~/.mempalace/)
+mempalace.yaml
+entities.json
+
+# Scratch / experiments — not part of the module
+scratch/

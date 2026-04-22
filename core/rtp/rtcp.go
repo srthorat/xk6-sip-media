@@ -20,9 +20,9 @@ import (
 )
 
 // RTCPStats holds aggregate RTCP statistics for a single stream.
+// It is a plain value type — no mutex. The owning RTCPSession protects it
+// with its own statsMu field.
 type RTCPStats struct {
-	mu sync.Mutex
-
 	// Sender side
 	PacketsSentTotal uint32
 	OctetsSentTotal  uint32
@@ -46,6 +46,7 @@ type RTCPSession struct {
 	remoteAddr *net.UDPAddr
 	ssrc       uint32
 	stats      *RTCPStats
+	statsMu    sync.Mutex // protects stats
 	rtpStats   *RTPStats
 	sendStats  *SendStats
 	stop       <-chan struct{}
@@ -102,10 +103,10 @@ func (s *RTCPSession) Run(stop <-chan struct{}) {
 	}
 }
 
-// Stats returns a copy of RTCP statistics collected so far.
+// Stats returns a snapshot copy of RTCP statistics collected so far.
 func (s *RTCPSession) Stats() RTCPStats {
-	s.stats.mu.Lock()
-	defer s.stats.mu.Unlock()
+	s.statsMu.Lock()
+	defer s.statsMu.Unlock()
 	return *s.stats
 }
 
@@ -120,11 +121,11 @@ func (s *RTCPSession) buildSR() []byte {
 	ntpSec, ntpFrac := toNTP(now)
 	ntpCompact := uint32(ntpSec<<16) | uint32(ntpFrac>>16)
 
-	s.stats.mu.Lock()
+	s.statsMu.Lock()
 	sent := s.sendStats.PacketsSent
 	s.stats.LastSRNTPCompact = ntpCompact
 	s.stats.LastSRReceived = now
-	s.stats.mu.Unlock()
+	s.statsMu.Unlock()
 
 	buf := make([]byte, 28) // SR fixed = 28 bytes
 
@@ -177,14 +178,14 @@ func (s *RTCPSession) buildRR() []byte {
 	binary.BigEndian.PutUint32(rb[12:16], uint32(s.rtpStats.Jitter))
 
 	// LSR / DLSR (last SR + delay since last SR)
-	s.stats.mu.Lock()
+	s.statsMu.Lock()
 	lsr := s.stats.LastSRNTPCompact
 	var dlsr uint32
 	if !s.stats.LastSRReceived.IsZero() {
 		delay := time.Since(s.stats.LastSRReceived)
 		dlsr = uint32(delay.Seconds() * 65536) // in 1/65536 second units
 	}
-	s.stats.mu.Unlock()
+	s.statsMu.Unlock()
 
 	binary.BigEndian.PutUint32(rb[16:20], lsr)
 	binary.BigEndian.PutUint32(rb[20:24], dlsr)
@@ -238,10 +239,10 @@ func (s *RTCPSession) parseSR(data []byte) {
 		(uint32(data[10]) << 8) | uint32(data[11])
 	ntpCompact = (ntpCompact << 16) | (uint32(data[12]) << 8) | uint32(data[13])
 
-	s.stats.mu.Lock()
+	s.statsMu.Lock()
 	s.stats.LastSRNTPCompact = ntpCompact
 	s.stats.LastSRReceived = time.Now()
-	s.stats.mu.Unlock()
+	s.statsMu.Unlock()
 
 	// Immediately send RR to allow sender RTT calculation
 	rr := s.buildRR()
@@ -268,9 +269,9 @@ func (s *RTCPSession) parseRR(data []byte) {
 	rttUnits := nowCompact - lsr - dlsr
 	rttMs := float64(rttUnits) / 65.536 // convert 1/65536 s → ms
 
-	s.stats.mu.Lock()
+	s.statsMu.Lock()
 	s.stats.RTTMs = rttMs
-	s.stats.mu.Unlock()
+	s.statsMu.Unlock()
 }
 
 // toNTP converts a time.Time to NTP epoch seconds and fraction.

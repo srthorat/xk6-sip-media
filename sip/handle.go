@@ -34,6 +34,7 @@ type CallHandle struct {
 	sess      *corertp.Session
 	sendStats *corertp.SendStats
 	recvStats *corertp.RTPStats
+	rtcpSess  *corertp.RTCPSession
 	recorder  *corertp.AudioRecorder
 	recPath   string
 
@@ -128,6 +129,10 @@ func (h *CallHandle) startFinalize() {
 		// Compute quality metrics
 		lossPercent := h.recvStats.PacketLossPercent()
 		mos := corertp.CalculateMOS(lossPercent, h.recvStats.Jitter)
+		var rtcpStats corertp.RTCPStats
+		if h.rtcpSess != nil {
+			rtcpStats = h.rtcpSess.Stats()
+		}
 
 		var silenceRatio float64
 		if h.recorder != nil {
@@ -140,12 +145,16 @@ func (h *CallHandle) startFinalize() {
 
 		h.mu.Lock()
 		h.result = corertp.CallResult{
-			PacketsSent:     h.sendStats.PacketsSent,
-			PacketsReceived: h.recvStats.PacketsReceived,
-			PacketsLost:     h.recvStats.PacketsLost,
-			Jitter:          h.recvStats.Jitter,
-			MOS:             mos,
-			SilenceRatio:    silenceRatio,
+			PacketsSent:        h.sendStats.PacketsSent,
+			PacketsReceived:    h.recvStats.PacketsReceived,
+			PacketsLost:        h.recvStats.PacketsLost,
+			Jitter:             h.recvStats.Jitter,
+			PacketLossPct:      lossPercent,
+			MOS:                mos,
+			SilenceRatio:       silenceRatio,
+			RTTMs:              rtcpStats.RTTMs,
+			RTCPFractionLost:   rtcpStats.FractionLost,
+			RTCPCumulativeLost: rtcpStats.CumulativeLost,
 		}
 		h.mu.Unlock()
 

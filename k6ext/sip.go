@@ -4,34 +4,17 @@ import (
 	"fmt"
 	"time"
 
+	"go.k6.io/k6/js/common"
 	"go.k6.io/k6/metrics"
 
 	corertp "xk6-sip-media/core/rtp"
 	sipcall "xk6-sip-media/sip"
 )
 
-// sipMetrics is populated once per VU during the first Call() or Dial() invocation.
-var sipMetrics *SIPMetrics
-
-// ensureMetrics lazily registers all custom k6 metrics on first use.
-func (m *SIPModule) ensureMetrics() {
-	if sipMetrics != nil {
-		return
-	}
-	reg := m.vu.InitEnv().Registry
-	var err error
-	sipMetrics, err = registerMetrics(reg)
-	if err != nil {
-		panic(fmt.Sprintf("xk6-sip-media: failed to register metrics: %v", err))
-	}
-}
-
 // ── sip.call() ──────────────────────────────────────────────────────────────
 
 // Call implements the blocking sip.call() JavaScript API (original behaviour).
 func (m *SIPModule) Call(opts map[string]interface{}) map[string]interface{} {
-	m.ensureMetrics()
-
 	cfg := parseCfg(opts)
 	start := time.Now()
 	result, err := sipcall.StartCall(cfg)
@@ -51,13 +34,10 @@ func (m *SIPModule) Call(opts map[string]interface{}) map[string]interface{} {
 //	call.waitDone();
 //	const r = call.result();
 func (m *SIPModule) Dial(opts map[string]interface{}) *K6CallHandle {
-	m.ensureMetrics()
-
 	cfg := parseCfg(opts)
 	handle, err := sipcall.Dial(cfg)
 	if err != nil {
-		// Return a "dead" handle that immediately returns an error result
-		panic(fmt.Sprintf("sip.dial: %v", err))
+		common.Throw(m.vu.Runtime(), fmt.Errorf("sip.dial: %w", err))
 	}
 	return &K6CallHandle{handle: handle}
 }
@@ -75,8 +55,6 @@ func (m *SIPModule) Dial(opts map[string]interface{}) *K6CallHandle {
 //	// ... make calls ...
 //	reg.unregister();
 func (m *SIPModule) Register(opts map[string]interface{}) *K6Registration {
-	m.ensureMetrics()
-
 	cfg := sipcall.RegisterConfig{}
 	if v, ok := opts["registrar"].(string); ok {
 		cfg.Registrar = v
@@ -123,13 +101,13 @@ func (m *SIPModule) Register(opts map[string]interface{}) *K6Registration {
 
 	reg, err := sipcall.Register(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("sip.register: %v", err))
+		common.Throw(m.vu.Runtime(), fmt.Errorf("sip.register: %w", err))
 	}
 
 	now := time.Now()
 	tagsAndMeta := m.vu.State().Tags.GetCurrentValues()
 	m.vu.State().Samples <- metrics.ConnectedSamples{
-		Samples: []metrics.Sample{makeSample(sipMetrics.RegisterSuccess, tagsAndMeta.Tags, 1)},
+		Samples: []metrics.Sample{makeSample(m.metrics.RegisterSuccess, tagsAndMeta.Tags, 1)},
 		Tags:    tagsAndMeta.Tags,
 		Time:    now,
 	}
@@ -144,8 +122,6 @@ func (m *SIPModule) Register(opts map[string]interface{}) *K6Registration {
 //	const res = sip.options({ target: "sip:pbx.example.com" });
 //	check(res, { 'options ok': (r) => r.success });
 func (m *SIPModule) Options(opts map[string]interface{}) map[string]interface{} {
-	m.ensureMetrics()
-
 	cfg := sipcall.OptionsConfig{}
 	if v, ok := opts["target"].(string); ok {
 		cfg.Target = v
@@ -179,7 +155,7 @@ func (m *SIPModule) Options(opts map[string]interface{}) map[string]interface{} 
 
 	if err != nil {
 		m.vu.State().Samples <- metrics.ConnectedSamples{
-			Samples: []metrics.Sample{makeSample(sipMetrics.OptionsFailure, tagsAndMeta.Tags, 1)},
+			Samples: []metrics.Sample{makeSample(m.metrics.OptionsFailure, tagsAndMeta.Tags, 1)},
 			Tags:    tagsAndMeta.Tags,
 			Time:    now,
 		}
@@ -188,8 +164,8 @@ func (m *SIPModule) Options(opts map[string]interface{}) map[string]interface{} 
 
 	m.vu.State().Samples <- metrics.ConnectedSamples{
 		Samples: []metrics.Sample{
-			makeSample(sipMetrics.OptionsSuccess, tagsAndMeta.Tags, 1),
-			makeSample(sipMetrics.OptionsRTT, tagsAndMeta.Tags, float64(res.RTT.Milliseconds())),
+			makeSample(m.metrics.OptionsSuccess, tagsAndMeta.Tags, 1),
+			makeSample(m.metrics.OptionsRTT, tagsAndMeta.Tags, float64(res.RTT.Milliseconds())),
 		},
 		Tags: tagsAndMeta.Tags,
 		Time: now,
@@ -215,8 +191,6 @@ func (m *SIPModule) Options(opts map[string]interface{}) map[string]interface{} 
 //	conf.waitDone();
 //	const r = conf.result();
 func (m *SIPModule) Conference(opts map[string]interface{}) *K6Conference {
-	m.ensureMetrics()
-
 	cfg := sipcall.ConferenceConfig{}
 	if v, ok := opts["bridgeURI"].(string); ok {
 		cfg.BridgeURI = v
@@ -241,7 +215,7 @@ func (m *SIPModule) Conference(opts map[string]interface{}) *K6Conference {
 
 	conf, err := sipcall.StartConference(cfg)
 	if err != nil {
-		panic(fmt.Sprintf("sip.conference: %v", err))
+		common.Throw(m.vu.Runtime(), fmt.Errorf("sip.conference: %w", err))
 	}
 	return &K6Conference{conf: conf}
 }
@@ -256,6 +230,12 @@ func parseCfg(opts map[string]interface{}) sipcall.CallConfig {
 	}
 	if v, ok := opts["target"].(string); ok {
 		cfg.Target = v
+	}
+	if v, ok := opts["aor"].(string); ok {
+		cfg.AOR = v
+	}
+	if v, ok := opts["displayName"].(string); ok {
+		cfg.DisplayName = v
 	}
 	if v, ok := opts["duration"].(string); ok {
 		if d, err := time.ParseDuration(v); err == nil {
@@ -377,7 +357,7 @@ func (m *SIPModule) emitAndReturn(
 
 	if err != nil {
 		m.vu.State().Samples <- metrics.ConnectedSamples{
-			Samples: []metrics.Sample{makeSample(sipMetrics.CallFailure, tagSet, 1)},
+			Samples: []metrics.Sample{makeSample(m.metrics.CallFailure, tagSet, 1)},
 			Tags:    tagSet,
 			Time:    now,
 		}
@@ -385,16 +365,16 @@ func (m *SIPModule) emitAndReturn(
 	}
 
 	samples := []metrics.Sample{
-		makeSample(sipMetrics.CallSuccess, tagSet, 1),
-		makeSample(sipMetrics.CallDuration, tagSet, float64(elapsed.Milliseconds())),
-		makeSample(sipMetrics.RTPPacketsSent, tagSet, float64(result.PacketsSent)),
-		makeSample(sipMetrics.RTPPacketsReceived, tagSet, float64(result.PacketsReceived)),
-		makeSample(sipMetrics.RTPPacketsLost, tagSet, float64(result.PacketsLost)),
-		makeSample(sipMetrics.RTPJitter, tagSet, result.Jitter),
-		makeSample(sipMetrics.MOSScore, tagSet, result.MOS),
+		makeSample(m.metrics.CallSuccess, tagSet, 1),
+		makeSample(m.metrics.CallDuration, tagSet, float64(elapsed.Milliseconds())),
+		makeSample(m.metrics.RTPPacketsSent, tagSet, float64(result.PacketsSent)),
+		makeSample(m.metrics.RTPPacketsReceived, tagSet, float64(result.PacketsReceived)),
+		makeSample(m.metrics.RTPPacketsLost, tagSet, float64(result.PacketsLost)),
+		makeSample(m.metrics.RTPJitter, tagSet, result.Jitter),
+		makeSample(m.metrics.MOSScore, tagSet, result.MOS),
 	}
 	if result.TransferOK {
-		samples = append(samples, makeSample(sipMetrics.TransferSuccess, tagSet, 1))
+		samples = append(samples, makeSample(m.metrics.TransferSuccess, tagSet, 1))
 	}
 
 	m.vu.State().Samples <- metrics.ConnectedSamples{
@@ -404,14 +384,19 @@ func (m *SIPModule) emitAndReturn(
 	}
 
 	return map[string]interface{}{
-		"success":     true,
-		"sent":        result.PacketsSent,
-		"received":    result.PacketsReceived,
-		"lost":        result.PacketsLost,
-		"jitter":      result.Jitter,
-		"mos":         result.MOS,
-		"pesq_mos":    result.PESQScore,
-		"ivr_ok":      result.IVRValid,
-		"transfer_ok": result.TransferOK,
+		"success":              true,
+		"sent":                 result.PacketsSent,
+		"received":             result.PacketsReceived,
+		"lost":                 result.PacketsLost,
+		"loss_pct":             result.PacketLossPct,
+		"jitter":               result.Jitter,
+		"mos":                  result.MOS,
+		"silence_ratio":        result.SilenceRatio,
+		"rtt_ms":               result.RTTMs,
+		"rtcp_fraction_lost":   result.RTCPFractionLost,
+		"rtcp_cumulative_lost": result.RTCPCumulativeLost,
+		"pesq_mos":             result.PESQScore,
+		"ivr_ok":               result.IVRValid,
+		"transfer_ok":          result.TransferOK,
 	}
 }
