@@ -99,4 +99,3 @@ func SendINVITEWithEarlyMedia(
 		PtMap:      ptMap,
 	}, early, nil
 }
-

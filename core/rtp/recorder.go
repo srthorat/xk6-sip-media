@@ -12,10 +12,10 @@ import (
 // File I/O is performed asynchronously via a background goroutine so that
 // callers in the reactor hot-path (Tick) are never blocked by disk latency.
 type AudioRecorder struct {
-	file    *os.File
-	mu      sync.Mutex
-	buf     []byte    // accumulated raw payload bytes (in-memory, always synchronous)
-	writeCh chan []byte // async channel to background file-writer goroutine
+	file       *os.File
+	mu         sync.Mutex
+	buf        []byte        // accumulated raw payload bytes (in-memory, always synchronous)
+	writeCh    chan []byte   // async channel to background file-writer goroutine
 	writerDone chan struct{} // closed when background goroutine exits
 }
 

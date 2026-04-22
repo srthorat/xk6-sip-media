@@ -55,9 +55,10 @@ func (s *shard) tick() {
 // timers from a fixed pool of worker goroutines (one per CPU core).
 //
 // Architecture:
-//   Single master timer (20ms) → fan-out goroutine broadcasts to N per-shard channels.
-//   Each shard owns a contiguous slice partition → zero cross-shard locking.
-//   Items are distributed via round-robin on Add().
+//
+//	Single master timer (20ms) → fan-out goroutine broadcasts to N per-shard channels.
+//	Each shard owns a contiguous slice partition → zero cross-shard locking.
+//	Items are distributed via round-robin on Add().
 //
 // Throughput target: ≥100,000 concurrent UDP streams on an 8-core node.
 type Reactor struct {
@@ -65,7 +66,7 @@ type Reactor struct {
 	nShards int
 	ticker  *time.Ticker
 	quit    chan struct{} // closed by Stop() to terminate the fan-out goroutine
-	next    uint64       // round-robin counter (atomic-free; only Add() needs it)
+	next    uint64        // round-robin counter (atomic-free; only Add() needs it)
 	addMu   sync.Mutex
 }
 

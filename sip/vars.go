@@ -18,9 +18,7 @@ func plcPayloadSize(codecName string) int {
 	}
 }
 
-
-//
-//	const token = call.responseHeader("X-IVR-Session");
+// const token = call.responseHeader("X-IVR-Session");
 func (h *CallHandle) ResponseHeader(name string) string {
 	if h.dialog == nil || h.dialog.InviteResponse == nil {
 		return ""

@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.21', '1.22']
+        go-version: ['1.23']
 
     steps:
       - uses: actions/checkout@v4
@@ -43,18 +43,22 @@ jobs:
       - name: Install xk6 tool
         run: CGO_ENABLED=1 go install go.k6.io/xk6/cmd/xk6@latest
 
-      - name: Run go fmt
-        run: if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then exit 1; fi
+      - name: Check formatting
+        run: |
+          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+            echo "The following files are not gofmt-clean:"
+            gofmt -s -l .
+            exit 1
+          fi
 
       - name: Verify dependencies
         run: go mod verify
 
       - name: Run Unit Tests
         run: CGO_ENABLED=1 go test -v -race ./...
-        env:
-          CGO_ENABLED: "1"
 
-      - name: Build custom k6 binary
-        run: CGO_ENABLED=1 xk6 build --with github.com/xk6-sip-media=.
-        env:
-          CGO_ENABLED: "1"
+      - name: Build default k6 binary (no G729)
+        run: CGO_ENABLED=1 xk6 build --with xk6-sip-media=.
+
+      - name: Build k6 binary with G729 (GPL opt-in)
+        run: CGO_ENABLED=1 xk6 build --with xk6-sip-media=. --build-arg tags=g729

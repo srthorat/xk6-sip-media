@@ -8,7 +8,7 @@ import (
 )
 
 // JitterBuffer implements a dynamic de-jittering priority queue designed to mirror
-// the behavior of enterprise hardware phones (Polycom/Cisco). It repairs out-of-order 
+// the behavior of enterprise hardware phones (Polycom/Cisco). It repairs out-of-order
 // UDP datagrams and synthesizes silence for irrecoverable dropped packets.
 type JitterBuffer struct {
 	mu           sync.Mutex
@@ -19,7 +19,7 @@ type JitterBuffer struct {
 	recorder     *AudioRecorder
 	// silenceSize is the byte length of one encoded 20ms payload for this codec,
 	// used to synthesize PLC silence frames. 0 means skip PLC writes (e.g. Opus).
-	silenceSize  int
+	silenceSize int
 
 	stop chan struct{}
 	wg   sync.WaitGroup
@@ -37,11 +37,11 @@ func NewJitterBuffer(recorder *AudioRecorder, delay time.Duration, silenceSize i
 		silenceSize:  silenceSize,
 		stop:         make(chan struct{}),
 	}
-	
+
 	if recorder != nil {
 		MediaReactor.Add(jb)
 	}
-	
+
 	return jb
 }
 
@@ -104,7 +104,7 @@ func (jb *JitterBuffer) Tick() bool {
 		silenceFrame := make([]byte, jb.silenceSize)
 		jb.recorder.Write(silenceFrame)
 	}
-	
+
 	jb.nextSeq++
 	return true
 }

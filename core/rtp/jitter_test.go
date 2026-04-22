@@ -10,7 +10,7 @@ import (
 
 // fakeRecorder collects Write calls for inspection.
 type fakeRecorder struct {
-	mu   sync.Mutex
+	mu     sync.Mutex
 	chunks [][]byte
 }
 
@@ -85,7 +85,6 @@ func TestJitterBuffer_OutOfOrder(t *testing.T) {
 		t.Errorf("expected nextSeq=102 after second tick, got %d", jb2.nextSeq)
 	}
 }
-
 
 // TestJitterBuffer_PLCOnMissedPacket verifies that a silence frame is injected
 // when the expected seq is missing (Packet Loss Concealment).

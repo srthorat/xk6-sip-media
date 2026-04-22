@@ -103,10 +103,18 @@ func ParseSDP(body string) (ip string, port int, ptMap map[uint8]string) {
 	}
 
 	// Statically inject default profiles if missing from remote answer (per RFC 3551)
-	if _, ok := ptMap[0]; !ok { ptMap[0] = "PCMU" }
-	if _, ok := ptMap[8]; !ok { ptMap[8] = "PCMA" }
-	if _, ok := ptMap[9]; !ok { ptMap[9] = "G722" }
-	if _, ok := ptMap[18]; !ok { ptMap[18] = "G729" }
+	if _, ok := ptMap[0]; !ok {
+		ptMap[0] = "PCMU"
+	}
+	if _, ok := ptMap[8]; !ok {
+		ptMap[8] = "PCMA"
+	}
+	if _, ok := ptMap[9]; !ok {
+		ptMap[9] = "G722"
+	}
+	if _, ok := ptMap[18]; !ok {
+		ptMap[18] = "G729"
+	}
 
 	ip = connectionIP
 	return

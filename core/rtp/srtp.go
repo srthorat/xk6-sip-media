@@ -380,7 +380,7 @@ func (p *StreamSRTPPlayer) Tick() bool {
 
 	raw, err := pkt.Marshal()
 	if err != nil {
-		return true 
+		return true
 	}
 
 	encrypted, err := p.srtp.EncryptPacket(raw)

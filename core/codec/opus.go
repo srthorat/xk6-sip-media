@@ -2,8 +2,8 @@ package codec
 
 import (
 	"fmt"
-	"sync"
 	"github.com/hraban/opus"
+	"sync"
 )
 
 // Opus is the ITU-T Opus Audio Codec (RFC 6716).
@@ -13,7 +13,7 @@ type Opus struct {
 	encoder *opus.Encoder
 	decoder *opus.Decoder
 	// 48 kHz mono -> 960 samples per 20ms frame
-	frameSize int 
+	frameSize int
 }
 
 func NewOpus() (Codec, error) {
@@ -22,7 +22,7 @@ func NewOpus() (Codec, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opus encoder init: %w", err)
 	}
-	
+
 	dec, err := opus.NewDecoder(48000, 1)
 	if err != nil {
 		return nil, fmt.Errorf("opus decoder init: %w", err)
