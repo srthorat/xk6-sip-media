@@ -1,7 +1,7 @@
 # .ai global configuration
 project: xk6-sip-media
 language: go
-go_version: "1.23"
+go_version: "1.25"
 cgo_required: true
 k6_api: k6/x/sip
 domain: voip-sip-rtp
