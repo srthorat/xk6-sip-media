@@ -185,5 +185,3 @@ func localOutboundIP() (string, error) {
 func resolveLocalIP(localIP string) string {
 	return resolveLocalIPAuto(localIP, false)
 }
-
-

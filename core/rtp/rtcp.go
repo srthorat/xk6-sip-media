@@ -45,7 +45,7 @@ type RTCPSession struct {
 	conn       *net.UDPConn
 	remoteAddr *net.UDPAddr
 	ssrc       uint32
-	sampleRate uint32     // RTP clock rate (Hz); used to convert jitter ms → RTP ts units
+	sampleRate uint32 // RTP clock rate (Hz); used to convert jitter ms → RTP ts units
 	stats      *RTCPStats
 	statsMu    sync.Mutex // protects stats
 	rtpStats   *RTPStats

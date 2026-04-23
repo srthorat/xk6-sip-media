@@ -229,8 +229,8 @@ func TestBuildRR_FractionLost(t *testing.T) {
 func TestParseSR_CompactNTP(t *testing.T) {
 	// Build a synthetic SR packet (28 bytes)
 	sr := make([]byte, 28)
-	sr[0] = 0x80 // V=2, P=0, RC=0
-	sr[1] = 200  // PT=SR
+	sr[0] = 0x80                           // V=2, P=0, RC=0
+	sr[1] = 200                            // PT=SR
 	binary.BigEndian.PutUint16(sr[2:4], 6) // length
 
 	// NTP timestamp at [8:16]: upper 32 bits (sec) at [8:12], lower 32 (frac) at [12:16]

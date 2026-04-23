@@ -22,10 +22,10 @@ type RTPStatsSnapshot struct {
 	PacketsReceived    int
 	PacketsLost        int
 	Jitter             float64
-	HighestSeqExtended uint32  // RFC 3550 extended seq: (rollover<<16)|highest
+	HighestSeqExtended uint32 // RFC 3550 extended seq: (rollover<<16)|highest
 	PacketLossPct      float64
-	RecvErrors         int     // non-timeout socket errors (e.g. EMSGSIZE, ECONNREFUSED)
-	BytesReceived      int64   // total payload bytes received
+	RecvErrors         int   // non-timeout socket errors (e.g. EMSGSIZE, ECONNREFUSED)
+	BytesReceived      int64 // total payload bytes received
 }
 
 // RTPStats tracks inbound RTP packet quality metrics.
@@ -35,7 +35,7 @@ type RTPStats struct {
 
 	PacketsReceived int
 	PacketsLost     int
-	Jitter          float64 // running average, milliseconds
+	Jitter          float64      // running average, milliseconds
 	BytesReceived   atomic.Int64 // total payload bytes received (written atomically)
 
 	lastSeq            uint16

@@ -54,10 +54,10 @@ type SRTPSession struct {
 
 	// Session keys cached at construction (kdr=0 ⟹ keys never change).
 	// Avoids per-packet key derivation and aes.NewCipher overhead.
-	encKey   []byte
-	saltKey  []byte
+	encKey    []byte
+	saltKey   []byte
 	authorKey []byte
-	encBlock cipher.Block // AES block cipher keyed with encKey
+	encBlock  cipher.Block // AES block cipher keyed with encKey
 }
 
 // ParseSRTPConfig parses the inline key-salt from an SDP a=crypto value.
