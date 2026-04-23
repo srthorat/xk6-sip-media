@@ -178,8 +178,16 @@ func (s *RTCPSession) buildRR() []byte {
 	rb := buf[8:]
 	binary.BigEndian.PutUint32(rb[0:4], s.stats.SendSSRC)
 
-	frac := uint8(math.Round(snap.PacketLossPct * 2.56)) // fraction lost = loss% × 256/100
-	rb[4] = frac
+	// RFC 3550 §6.4.1: fraction lost is floor(loss% × 256/100), clamped to [0,255].
+	fractionLost := snap.PacketLossPct * 256 / 100
+	if fractionLost < 0 {
+		fractionLost = 0
+	}
+	frac := uint32(math.Floor(fractionLost))
+	if frac > 255 {
+		frac = 255
+	}
+	rb[4] = uint8(frac)
 
 	cumLost := snap.PacketsLost
 	rb[5] = byte(cumLost >> 16)

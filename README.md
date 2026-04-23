@@ -1,7 +1,7 @@
 # xk6-sip-media
 
 [![k6 extension](https://img.shields.io/badge/k6-extension-blue)](https://k6.io/docs/extensions/)
-[![Go 1.23](https://img.shields.io/badge/Go-1.23-blue)](https://go.dev/)
+[![Go 1.25](https://img.shields.io/badge/Go-1.25-blue)](https://go.dev/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](#)
 [![Scenarios](https://img.shields.io/badge/scenarios-27-orange)](#)
@@ -100,7 +100,7 @@ export default function () {
 
 | Tool | Version | Purpose |
 |---|---|---|
-| [Go](https://go.dev/dl/) | 1.23+ | Build toolchain |
+| [Go](https://go.dev/dl/) | 1.25+ | Build toolchain |
 | [xk6](https://github.com/grafana/xk6) | latest | k6 extension builder |
 | GCC / Clang | system | CGO required for Opus codec |
 | [ffmpeg](https://ffmpeg.org/) | any | Generate test audio (optional) |

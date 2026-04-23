@@ -394,6 +394,7 @@ func (p *StreamSRTPPlayer) Tick() bool {
 	if err := p.sess.Send(encrypted); err == nil {
 		p.stats.PacketsSent.Add(1)
 		p.stats.OctetsSent.Add(int64(len(payload)))
+		p.stats.BytesSent.Add(int64(len(encrypted)))
 	}
 
 	return true
@@ -424,6 +425,7 @@ func ReceiveSRTP(conn *net.UDPConn, srtp *SRTPSession, stats *RTPStats, recorder
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				continue
 			}
+			stats.RecvErrors.Add(1)
 			continue
 		}
 
@@ -439,6 +441,7 @@ func ReceiveSRTP(conn *net.UDPConn, srtp *SRTPSession, stats *RTPStats, recorder
 
 		arrival := time.Now()
 		stats.update(pkt.SequenceNumber, arrival)
+		stats.BytesReceived.Add(int64(len(pkt.Payload)))
 
 		if jb != nil && len(pkt.Payload) > 0 {
 			jb.Push(&pkt)

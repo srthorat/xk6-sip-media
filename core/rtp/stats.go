@@ -155,6 +155,6 @@ type CallResult struct {
 	TransferOK         bool    // true if REFER was accepted (202)
 	RecvErrors         int     // non-timeout UDP receive errors during the call
 	RecorderDrops      int     // frames dropped by the async file-writer (channel full)
-	BytesSent          int64   // total RTP payload bytes sent
+	BytesSent          int64   // total RTP wire bytes sent (RTP header + payload)
 	BytesReceived      int64   // total RTP payload bytes received
 }

@@ -1,6 +1,7 @@
 package rtp
 
 import (
+	"sort"
 	"sync"
 	"time"
 
@@ -84,9 +85,19 @@ func (jb *JitterBuffer) Tick() bool {
 
 	select {
 	case <-jb.stop:
-		// Flush remaining packets without iterating up to 65535 gaps.
-		for _, pkt := range jb.packets {
-			jb.recorder.Write(pkt.Payload)
+		// Flush remaining packets in sequence order (sort by circular distance
+		// from nextSeq) to avoid scrambling the recorded audio tail.
+		seqs := make([]uint16, 0, len(jb.packets))
+		for seq := range jb.packets {
+			seqs = append(seqs, seq)
+		}
+		sort.Slice(seqs, func(i, j int) bool {
+			di := uint16(seqs[i] - jb.nextSeq)
+			dj := uint16(seqs[j] - jb.nextSeq)
+			return di < dj
+		})
+		for _, seq := range seqs {
+			jb.recorder.Write(jb.packets[seq].Payload)
 		}
 		jb.packets = nil
 		return false // Signal removal

@@ -59,7 +59,7 @@ func StartConference(cfg ConferenceConfig) (*Conference, error) {
 	c := &Conference{cfg: cfg}
 
 	// Dial the initial host leg to open the bridge room
-	leg, err := c.dialLeg(cfg.BridgeURI)
+	leg, err := c.dialLeg(cfg.BridgeURI, nil)
 	if err != nil {
 		return nil, fmt.Errorf("conference: dial host leg: %w", err)
 	}
@@ -73,12 +73,14 @@ func StartConference(cfg ConferenceConfig) (*Conference, error) {
 
 // AddParticipant dials targetURI (or BridgeURI if empty) into the conference.
 // Each leg gets a unique RTP port so concurrent participants do not collide.
+// If cfg is non-nil, its AudioFile, Codec, and LocalIP fields override the
+// conference-level defaults for this leg only.
 func (c *Conference) AddParticipant(targetURI string, cfg *ConferenceConfig) error {
 	uri := targetURI
 	if uri == "" {
 		uri = c.cfg.BridgeURI
 	}
-	leg, err := c.dialLeg(uri)
+	leg, err := c.dialLeg(uri, cfg)
 	if err != nil {
 		return fmt.Errorf("conference add participant %s: %w", uri, err)
 	}
@@ -161,7 +163,9 @@ func (c *Conference) Result() ConferenceResult {
 }
 
 // dialLeg creates one CallHandle for a single conference participant leg.
-func (c *Conference) dialLeg(targetURI string) (*CallHandle, error) {
+// If override is non-nil, its AudioFile, Codec, and LocalIP fields take
+// precedence over the conference-level config for this leg.
+func (c *Conference) dialLeg(targetURI string, override *ConferenceConfig) (*CallHandle, error) {
 	// Each leg gets a unique From user to simulate different participants
 	fromUser := fmt.Sprintf("conf-leg-%d", rand.Intn(999999))
 	_ = fromUser // future: set custom From header
@@ -173,6 +177,17 @@ func (c *Conference) dialLeg(targetURI string) (*CallHandle, error) {
 		LocalIP:   c.cfg.LocalIP,
 		Duration:  c.cfg.Duration,
 		RTPPort:   0, // auto-assign unique port per leg
+	}
+	if override != nil {
+		if override.AudioFile != "" {
+			cfg.AudioFile = override.AudioFile
+		}
+		if override.Codec != "" {
+			cfg.Codec = override.Codec
+		}
+		if override.LocalIP != "" {
+			cfg.LocalIP = override.LocalIP
+		}
 	}
 	if cfg.Codec == "" {
 		cfg.Codec = "PCMU"
