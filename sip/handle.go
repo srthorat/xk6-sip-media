@@ -170,20 +170,6 @@ func (h *CallHandle) startFinalize() {
 	}()
 }
 
-// stopAndWait is called when the remote sends BYE first — we mark inactive
-// and let the finalize goroutine handle the rest.
-func (h *CallHandle) stopAndWait() {
-	h.mu.Lock()
-	h.active = false
-	h.mu.Unlock()
-
-	select {
-	case <-h.stop:
-	default:
-		close(h.stop)
-	}
-}
-
 // dialogID returns a string uniquely identifying this call's SIP dialog.
 // Used to build Replaces headers for attended transfer.
 func (h *CallHandle) dialogID() (callID, toTag, fromTag string, err error) {

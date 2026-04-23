@@ -8,12 +8,6 @@ import (
 	pionrtp "github.com/pion/rtp"
 )
 
-// fakeRecorder collects Write calls for inspection.
-type fakeRecorder struct {
-	mu     sync.Mutex
-	chunks [][]byte
-}
-
 func newFakeRecorder() *AudioRecorder {
 	// Use the real recorder with empty path (in-memory)
 	r, _ := NewRecorder("")

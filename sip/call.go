@@ -136,8 +136,8 @@ func loopPayloads(payloads [][]byte, dur time.Duration) [][]byte {
 	if dur == 0 {
 		return payloads // no duration cap: play once
 	}
-	const frameMs = 20 * time.Millisecond
-	needed := int(dur/frameMs) + 10
+	const frameDur = 20 * time.Millisecond
+	needed := int(dur/frameDur) + 10
 	if needed <= len(payloads) {
 		return payloads[:needed]
 	}

@@ -78,10 +78,6 @@ func (c *Conference) AddParticipant(targetURI string, cfg *ConferenceConfig) err
 	if uri == "" {
 		uri = c.cfg.BridgeURI
 	}
-	if cfg == nil {
-		cfg = &c.cfg
-	}
-
 	leg, err := c.dialLeg(uri)
 	if err != nil {
 		return fmt.Errorf("conference add participant %s: %w", uri, err)

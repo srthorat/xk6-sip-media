@@ -302,17 +302,6 @@ func deriveIV(salt []byte, ssrc uint32, index uint64) []byte {
 	return iv
 }
 
-// aesCMCrypt performs AES Counter Mode encryption/decryption in-place.
-func aesCMCrypt(key, iv, data []byte) error {
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return fmt.Errorf("srtp: AES cipher: %w", err)
-	}
-	stream := cipher.NewCTR(block, iv)
-	stream.XORKeyStream(data, data)
-	return nil
-}
-
 func validateConfig(cfg *SRTPConfig) error {
 	if cfg == nil {
 		return fmt.Errorf("srtp: config is nil")
@@ -324,15 +313,6 @@ func validateConfig(cfg *SRTPConfig) error {
 		return fmt.Errorf("srtp: master salt must be 14 bytes, got %d", len(cfg.MasterSalt))
 	}
 	return nil
-}
-
-func indexByte(s string, c byte) int {
-	for i := 0; i < len(s); i++ {
-		if s[i] == c {
-			return i
-		}
-	}
-	return -1
 }
 
 // ── SRTP-aware Stream ─────────────────────────────────────────────────────

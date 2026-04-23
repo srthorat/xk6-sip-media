@@ -180,7 +180,4 @@ func resolveLocalIP(localIP string) string {
 	return resolveLocalIPAuto(localIP, false)
 }
 
-// makeFromURI constructs a SIP from URI for the given local host.
-func makeFromURI(localHost string) sipmsg.Uri {
-	return sipmsg.Uri{User: "k6load", Host: localHost}
-}
+
