@@ -96,30 +96,183 @@ export default function () {
 
 ## Quick Start
 
+### Prerequisites
+
+| Tool | Version | Purpose |
+|---|---|---|
+| [Go](https://go.dev/dl/) | 1.23+ | Build toolchain |
+| [xk6](https://github.com/grafana/xk6) | latest | k6 extension builder |
+| GCC / Clang | system | CGO required for Opus codec |
+| [ffmpeg](https://ffmpeg.org/) | any | Generate test audio (optional) |
+
+> **macOS:** `brew install go gcc ffmpeg`  
+> **Ubuntu/Debian:** `apt install golang gcc ffmpeg`
+
+---
+
+### Option A — Makefile (recommended)
+
+```bash
+# Clone the repo
+git clone https://github.com/your-org/xk6-sip-media.git
+cd xk6-sip-media
+
+# Build the custom k6 binary (installs xk6 automatically)
+make build
+# Equivalent to: xk6 build --cgo --with xk6-sip-media=.
+
+# Run unit tests
+make test
+
+# Clean build artifacts
+make clean
+```
+
+### Option B — Manual steps
+
 ```bash
 # 1. Install xk6
 go install go.k6.io/xk6/cmd/xk6@latest
 
-# 2. Build custom k6 binary
-cd /path/to/xk6-sip-media
-xk6 build --with xk6-sip-media=.
+# 2. Build the custom k6 binary
+#    --cgo is REQUIRED: the Opus codec uses CGO
+cd xk6-sip-media
+xk6 build --cgo --with xk6-sip-media=.
 
-# 3. Generate test audio (requires ffmpeg)
+# 3. Verify the build
+./k6 version
+# Expected output:
+#   k6 v1.7.1 (go1.25.x, darwin/arm64)
+#   Extensions:
+#     xk6-sip-media (devel), k6/x/sip [js]
+
+# 4. Run unit tests (all packages)
+CGO_ENABLED=1 CGO_LDFLAGS="-Wl,-w" go test -race -count=1 ./...
+
+# 5. Generate test audio (requires ffmpeg)
 cd examples/audio && bash generate_sample.sh
 # Creates: sample.wav, sample.mp3, hold_music.mp3, sample_hd.wav
 
-# 4. Run a test (loopback sanity)
+# 6. Run a sanity test
 ./k6 run examples/k6/scenarios/01_baseline.js
 
-# 5. Run against a real SIP server
+# 7. Run against a real SIP server
 SIP_TARGET="sip:ivr@192.168.1.100" ./k6 run examples/k6/scenarios/01_baseline.js
 ```
 
+> **Why `--cgo`?** xk6 defaults to `CGO_ENABLED=0`. This extension links `libopus` via CGO.
+> Omitting `--cgo` produces: `ERR compiling: executing go command: exit status 1`.
+
 ## Vonage Smoke Scripts
 
-- `examples/k6/vonage_single_call.js` — 1 call, 20 seconds, `examples/audio/hard.wav`, MOS > 3.8
-- `examples/k6/vonage_two_call.js` — 2 concurrent calls, 20 seconds each, same RTP / MOS checks
-- `examples/k6/vonage_ten_call.js` — 10 concurrent calls, 20 seconds each, same RTP / MOS checks
+Five ready-made scripts for Vonage SIP testing. All require these env vars:
+
+```bash
+export VONAGE_USERNAME=<sip-username>
+export VONAGE_DOMAIN=<sip-domain>          # e.g. edge4-va.qa7.vonedge.com
+export VONAGE_PASSWORD=<sip-password>
+export VONAGE_CALLEE=<extension>           # e.g. 443361
+export VONAGE_IVR_CALLEE=<ivr-extension>  # e.g. 443362  (ivr_flow only)
+```
+
+Or put them in a `.env` file (see `.env.example`) and load with:
+```bash
+export $(grep -v '^#' .env | xargs)
+```
+
+| Script | VUs | Auth | Duration | Checks |
+|---|:---:|---|---|---|
+| `vonage_direct_call.js` | 1 | Proxy auth (no REGISTER) | 20 s | success, RTP, loss < 5%, MOS > 3.8 |
+| `vonage_single_call.js` | 1 | REGISTER + call | 20 s | success, RTP, loss < 5%, MOS > 3.8 |
+| `vonage_two_call.js` | 2 | REGISTER + concurrent calls | 20 s | success, RTP, loss < 5%, MOS > 3.8 |
+| `vonage_ten_call.js` | 10 | REGISTER + concurrent calls | 20 s | success, RTP, loss < 5%, MOS > 3.8 |
+| `vonage_ivr_flow.js` | 1 | REGISTER + dial + DTMF | ~24 s | success, RTP, loss < 5%, hangup ok |
+
+### How to run
+
+```bash
+# Direct call (no REGISTER)
+./k6 run examples/k6/vonage_direct_call.js
+
+# Single call with REGISTER
+./k6 run examples/k6/vonage_single_call.js
+
+# 2 concurrent calls
+./k6 run examples/k6/vonage_two_call.js
+
+# 10 concurrent calls
+./k6 run examples/k6/vonage_ten_call.js
+
+# IVR flow: dial → wait 3 s → DTMF 2 → wait 20 s → BYE
+./k6 run examples/k6/vonage_ivr_flow.js
+```
+
+### Sample results (Vonage QA environment — 2026-04-23)
+
+**vonage_direct_call.js** — 1 VU, direct INVITE (proxy auth), no REGISTER
+```
+✓ call succeeded
+✓ sent RTP packets
+✓ received RTP packets
+✓ packet loss < 5%
+✓ mos > 3.8
+
+mos_score............: avg=4.43
+rtp_jitter_ms........: avg=0.46 ms
+rtp_packets_sent.....: 1000
+rtp_packets_received.: 738
+rtp_packets_lost.....: 0
+sip_call_duration....: avg=21.64s
+```
+
+**vonage_single_call.js** — 1 VU, REGISTER + 20 s call
+```
+✓ call succeeded        ✓ sent RTP packets
+✓ received RTP packets  ✓ packet loss < 5%
+✓ mos > 3.8
+
+mos_score............: avg=4.42
+rtp_jitter_ms........: avg=1.21 ms
+rtp_packets_sent.....: 1000
+rtp_packets_received.: 741    lost: 1
+loss_pct.............: 0.13%
+sip_call_duration....: avg=21.2s
+silence_ratio........: 0.0422
+```
+
+**vonage_two_call.js** — 2 VUs, concurrent calls
+```
+checks: 10/10 passed (100%)
+
+mos_score............: avg=4.43  min=4.43  max=4.43
+rtp_jitter_ms........: avg=0.60  min=0.59  max=0.62 ms
+rtp_packets_sent.....: 1998   received: 1478   lost: 0
+sip_call_duration....: avg=21.25s
+sip_call_success.....: 2
+```
+
+**vonage_ten_call.js** — 10 VUs, all concurrent
+```
+checks: 50/50 passed (100%)
+
+mos_score............: avg=4.43  min=4.43  max=4.43
+rtp_jitter_ms........: avg=0.66  min=0.50  max=1.14 ms
+rtp_packets_sent.....: 10000   received: 7157   lost: 0
+sip_call_duration....: avg=23.24s  min=22.53s  max=24.01s
+sip_call_success.....: 10
+```
+
+**vonage_ivr_flow.js** — 1 VU, REGISTER → dial IVR → wait → DTMF 2 → BYE
+```
+✓ call succeeded        ✓ sent RTP packets
+✓ received RTP packets  ✓ packet loss < 5%
+✓ hangup ok
+
+rtp_packets_sent.....: 1155   received: 1120   lost: 0
+rtp_jitter_ms........: avg=2.18 ms
+mos_score............: 4.42
+iteration_duration...: avg=24.27s
+```
 
 ---
 

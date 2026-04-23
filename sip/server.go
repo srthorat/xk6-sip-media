@@ -258,6 +258,8 @@ func (s *Server) handleInvite(req *sipmsg.Request, tx sipmsg.ServerTransaction) 
 		PacketsLost:     snap.PacketsLost,
 		Jitter:          snap.Jitter,
 		MOS:             mos,
+		BytesSent:       sendStats.BytesSent.Load(),
+		BytesReceived:   snap.BytesReceived,
 	})
 	s.mu.Unlock()
 }

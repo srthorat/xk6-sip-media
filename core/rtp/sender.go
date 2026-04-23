@@ -73,6 +73,7 @@ func (p *StreamPlayer) Tick() bool {
 	if err := p.sess.Send(raw); err == nil {
 		p.stats.PacketsSent.Add(1)
 		p.stats.OctetsSent.Add(int64(len(payload)))
+		p.stats.BytesSent.Add(int64(len(raw)))
 	}
 
 	return true // continue streaming

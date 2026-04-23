@@ -13,6 +13,7 @@ import (
 type SendStats struct {
 	PacketsSent atomic.Int64
 	OctetsSent  atomic.Int64 // total unencrypted payload bytes sent
+	BytesSent   atomic.Int64 // total wire bytes sent (RTP header + payload)
 }
 
 // RTPStatsSnapshot is an immutable point-in-time copy of receive stats.
@@ -24,6 +25,7 @@ type RTPStatsSnapshot struct {
 	HighestSeqExtended uint32  // RFC 3550 extended seq: (rollover<<16)|highest
 	PacketLossPct      float64
 	RecvErrors         int     // non-timeout socket errors (e.g. EMSGSIZE, ECONNREFUSED)
+	BytesReceived      int64   // total payload bytes received
 }
 
 // RTPStats tracks inbound RTP packet quality metrics.
@@ -34,6 +36,7 @@ type RTPStats struct {
 	PacketsReceived int
 	PacketsLost     int
 	Jitter          float64 // running average, milliseconds
+	BytesReceived   atomic.Int64 // total payload bytes received (written atomically)
 
 	lastSeq            uint16
 	lastArrival        time.Time
@@ -74,6 +77,7 @@ func (s *RTPStats) Snapshot() RTPStatsSnapshot {
 		HighestSeqExtended: s.highestSeqExtended,
 		PacketLossPct:      s.lossPercent(),
 		RecvErrors:         int(s.RecvErrors.Load()),
+		BytesReceived:      s.BytesReceived.Load(),
 	}
 }
 
@@ -151,4 +155,6 @@ type CallResult struct {
 	TransferOK         bool    // true if REFER was accepted (202)
 	RecvErrors         int     // non-timeout UDP receive errors during the call
 	RecorderDrops      int     // frames dropped by the async file-writer (channel full)
+	BytesSent          int64   // total RTP payload bytes sent
+	BytesReceived      int64   // total RTP payload bytes received
 }

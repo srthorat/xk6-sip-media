@@ -34,6 +34,11 @@ type SIPMetrics struct {
 	OptionsSuccess *metrics.Metric
 	OptionsFailure *metrics.Metric
 	OptionsRTT     *metrics.Metric
+
+	// Byte counters (SIP/RTP traffic; k6 built-in data_sent/data_received only
+	// covers HTTP, so we expose these as custom metrics)
+	RTPBytesSent     *metrics.Metric
+	RTPBytesReceived *metrics.Metric
 }
 
 // registerMetrics registers all custom metrics with the k6 metrics registry.
@@ -84,6 +89,12 @@ func registerMetrics(registry *metrics.Registry) (*SIPMetrics, error) {
 		return nil, err
 	}
 	if m.OptionsRTT, err = registry.NewMetric("sip_options_rtt_ms", metrics.Trend, metrics.Time); err != nil {
+		return nil, err
+	}
+	if m.RTPBytesSent, err = registry.NewMetric("rtp_bytes_sent", metrics.Counter, metrics.Data); err != nil {
+		return nil, err
+	}
+	if m.RTPBytesReceived, err = registry.NewMetric("rtp_bytes_received", metrics.Counter, metrics.Data); err != nil {
 		return nil, err
 	}
 

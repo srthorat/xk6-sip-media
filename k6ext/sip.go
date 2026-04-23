@@ -382,6 +382,8 @@ func (m *SIPModule) emitAndReturn(
 		makeSample(m.metrics.RTPPacketsLost, tagSet, float64(result.PacketsLost)),
 		makeSample(m.metrics.RTPJitter, tagSet, result.Jitter),
 		makeSample(m.metrics.MOSScore, tagSet, result.MOS),
+		makeSample(m.metrics.RTPBytesSent, tagSet, float64(result.BytesSent)),
+		makeSample(m.metrics.RTPBytesReceived, tagSet, float64(result.BytesReceived)),
 	}
 	if result.TransferOK {
 		samples = append(samples, makeSample(m.metrics.TransferSuccess, tagSet, 1))

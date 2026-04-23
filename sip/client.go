@@ -81,6 +81,12 @@ func NewClientWithTransport(localHost, transport string, tlsCfg *TLSConfig) (*Cl
 		return nil, fmt.Errorf("sip: create UA: %w", err)
 	}
 
+	// Suppress the "UnhandledResponseHandler handler not added" warning that
+	// sipgo logs whenever a 100 Trying (or other provisional response) arrives
+	// outside an active client transaction (e.g. retransmitted after the
+	// transaction already completed).  We simply discard these silently.
+	ua.TransactionLayer().UnhandledResponseHandler(func(_ *sipmsg.Response) {})
+
 	client, err := sipgo.NewClient(ua,
 		sipgo.WithClientHostname(localHost),
 	)

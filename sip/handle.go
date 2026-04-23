@@ -159,6 +159,8 @@ func (h *CallHandle) startFinalize() {
 			RTCPCumulativeLost: rtcpStats.CumulativeLost,
 			RecvErrors:         snap.RecvErrors,
 			RecorderDrops:      recorderDrops,
+			BytesSent:          h.sendStats.BytesSent.Load(),
+			BytesReceived:      snap.BytesReceived,
 		}
 		h.mu.Unlock()
 
