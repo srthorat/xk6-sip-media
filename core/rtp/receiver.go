@@ -52,7 +52,7 @@ func Receive(conn *net.UDPConn, stats *RTPStats, recorder *AudioRecorder, silenc
 
 		arrival := time.Now()
 		stats.update(pkt.SequenceNumber, arrival)
-		stats.BytesReceived.Add(int64(len(pkt.Payload)))
+		stats.BytesReceived.Add(int64(n))
 
 		if jb != nil && len(pkt.Payload) > 0 {
 			// Push into priority queue, decoupling from synchronous IO

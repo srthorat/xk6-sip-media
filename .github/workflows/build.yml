@@ -58,10 +58,10 @@ jobs:
         run: CGO_ENABLED=1 go test -v -race ./...
 
       - name: Build default k6 binary (no G729)
-        run: CGO_ENABLED=1 xk6 build --with xk6-sip-media=.
+        run: CGO_ENABLED=1 xk6 build --cgo --with xk6-sip-media=.
 
       - name: Build k6 binary with G729 (GPL opt-in)
         env:
           CGO_ENABLED: "1"
           GOFLAGS: "-tags=g729"
-        run: xk6 build --with xk6-sip-media=.
+        run: xk6 build --cgo --with xk6-sip-media=.

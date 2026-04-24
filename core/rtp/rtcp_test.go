@@ -218,7 +218,16 @@ func TestBuildRR_FractionLost(t *testing.T) {
 	fracByte := rr[8+4] // rb[4] = fraction lost byte
 
 	snap := rtpStats.Snapshot()
-	wantFrac := uint8(math.Round(snap.PacketLossPct * 2.56))
+	// Mirror buildRR: floor(loss% × 256/100), clamped to [0,255] (RFC 3550 §6.4.1).
+	fl := snap.PacketLossPct * 256 / 100
+	if fl < 0 {
+		fl = 0
+	}
+	wantFrac32 := uint32(math.Floor(fl))
+	if wantFrac32 > 255 {
+		wantFrac32 = 255
+	}
+	wantFrac := uint8(wantFrac32)
 	if fracByte != wantFrac {
 		t.Errorf("fraction lost byte: want %d (%.1f%%), got %d", wantFrac, snap.PacketLossPct, fracByte)
 	}

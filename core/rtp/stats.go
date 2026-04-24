@@ -25,7 +25,7 @@ type RTPStatsSnapshot struct {
 	HighestSeqExtended uint32 // RFC 3550 extended seq: (rollover<<16)|highest
 	PacketLossPct      float64
 	RecvErrors         int   // non-timeout socket errors (e.g. EMSGSIZE, ECONNREFUSED)
-	BytesReceived      int64 // total payload bytes received
+	BytesReceived      int64 // total RTP wire bytes received (UDP read length)
 }
 
 // RTPStats tracks inbound RTP packet quality metrics.
@@ -36,7 +36,7 @@ type RTPStats struct {
 	PacketsReceived int
 	PacketsLost     int
 	Jitter          float64      // running average, milliseconds
-	BytesReceived   atomic.Int64 // total payload bytes received (written atomically)
+	BytesReceived   atomic.Int64 // total RTP wire bytes received (UDP read length)
 
 	lastSeq            uint16
 	lastArrival        time.Time
@@ -156,5 +156,5 @@ type CallResult struct {
 	RecvErrors         int     // non-timeout UDP receive errors during the call
 	RecorderDrops      int     // frames dropped by the async file-writer (channel full)
 	BytesSent          int64   // total RTP wire bytes sent (RTP header + payload)
-	BytesReceived      int64   // total RTP payload bytes received
+	BytesReceived      int64   // total RTP wire bytes received (UDP read length)
 }

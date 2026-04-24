@@ -6,7 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"os"
 
@@ -86,10 +86,11 @@ func NewClientWithTransport(localHost, transport string, tlsCfg *TLSConfig) (*Cl
 	// sipgo logs whenever a 100 Trying arrives outside an active client
 	// transaction (e.g. retransmitted after the transaction already completed).
 	// Only 1xx provisionals are silently dropped; unexpected final responses
-	// are logged at debug level so real transaction bugs remain diagnosable.
+	// are emitted at slog.Debug level so real transaction bugs remain diagnosable
+	// without polluting normal output.
 	ua.TransactionLayer().UnhandledResponseHandler(func(resp *sipmsg.Response) {
 		if resp.StatusCode >= 200 {
-			log.Printf("[sip] unhandled response %d %s", resp.StatusCode, resp.Reason)
+			slog.Debug("[sip] unhandled response", "status", resp.StatusCode, "reason", resp.Reason)
 		}
 	})
 

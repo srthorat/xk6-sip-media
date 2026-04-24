@@ -441,7 +441,7 @@ func ReceiveSRTP(conn *net.UDPConn, srtp *SRTPSession, stats *RTPStats, recorder
 
 		arrival := time.Now()
 		stats.update(pkt.SequenceNumber, arrival)
-		stats.BytesReceived.Add(int64(len(pkt.Payload)))
+		stats.BytesReceived.Add(int64(n))
 
 		if jb != nil && len(pkt.Payload) > 0 {
 			jb.Push(&pkt)
