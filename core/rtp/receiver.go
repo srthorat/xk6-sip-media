@@ -40,7 +40,9 @@ func Receive(conn *net.UDPConn, stats *RTPStats, recorder *AudioRecorder, silenc
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				continue
 			}
-			continue // other errors: log in production, ignore here
+			// Non-timeout error (e.g. EMSGSIZE, ECONNREFUSED): count and continue.
+			stats.RecvErrors.Add(1)
+			continue
 		}
 
 		var pkt pionrtp.Packet
@@ -50,6 +52,7 @@ func Receive(conn *net.UDPConn, stats *RTPStats, recorder *AudioRecorder, silenc
 
 		arrival := time.Now()
 		stats.update(pkt.SequenceNumber, arrival)
+		stats.BytesReceived.Add(int64(n))
 
 		if jb != nil && len(pkt.Payload) > 0 {
 			// Push into priority queue, decoupling from synchronous IO

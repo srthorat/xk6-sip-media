@@ -1,6 +1,7 @@
 package rtp
 
 import (
+	"bytes"
 	"crypto/rand"
 	"testing"
 	"time"
@@ -191,4 +192,141 @@ func encodeBase64(data []byte) string {
 		out[j-1] = '='
 	}
 	return string(out)
+}
+
+// ── Key-caching tests ─────────────────────────────────────────────────────────
+
+// TestSRTPSession_KeysCachedAtInit verifies that encKey, saltKey, authorKey, and
+// encBlock are populated immediately after NewSRTPSenderSession (not nil/zero).
+func TestSRTPSession_KeysCachedAtInit(t *testing.T) {
+	keyBytes := generateSRTPKey(t)
+	cfg := &SRTPConfig{
+		MasterKey:  keyBytes[:16],
+		MasterSalt: keyBytes[16:],
+		Profile:    "AES_CM_128_HMAC_SHA1_80",
+	}
+
+	sess, err := NewSRTPSenderSession(cfg, 0xDEADBEEF)
+	if err != nil {
+		t.Fatalf("NewSRTPSenderSession: %v", err)
+	}
+
+	if len(sess.encKey) == 0 {
+		t.Error("encKey not cached: len=0")
+	}
+	if len(sess.saltKey) == 0 {
+		t.Error("saltKey not cached: len=0")
+	}
+	if len(sess.authorKey) == 0 {
+		t.Error("authorKey not cached: len=0")
+	}
+	if sess.encBlock == nil {
+		t.Error("encBlock not cached: nil")
+	}
+}
+
+// TestSRTPSession_ReceiverKeysCachedAtInit does the same for the receiver side.
+func TestSRTPSession_ReceiverKeysCachedAtInit(t *testing.T) {
+	keyBytes := generateSRTPKey(t)
+	cfg := &SRTPConfig{
+		MasterKey:  keyBytes[:16],
+		MasterSalt: keyBytes[16:],
+		Profile:    "AES_CM_128_HMAC_SHA1_80",
+	}
+
+	sess, err := NewSRTPReceiverSession(cfg, 1)
+	if err != nil {
+		t.Fatalf("NewSRTPReceiverSession: %v", err)
+	}
+
+	if sess.encBlock == nil {
+		t.Error("receiver encBlock not cached: nil")
+	}
+}
+
+// TestSRTPSession_CachedKeysSameAsDerived verifies that the cached keys match
+// what deriveKeys(0) would compute — i.e., caching is correct, not fast but wrong.
+func TestSRTPSession_CachedKeysSameAsDerived(t *testing.T) {
+	keyBytes := generateSRTPKey(t)
+	cfg := &SRTPConfig{
+		MasterKey:  keyBytes[:16],
+		MasterSalt: keyBytes[16:],
+		Profile:    "AES_CM_128_HMAC_SHA1_80",
+	}
+
+	sess, err := NewSRTPSenderSession(cfg, 0xCAFEBABE)
+	if err != nil {
+		t.Fatalf("NewSRTPSenderSession: %v", err)
+	}
+
+	wantEnc, wantSalt, wantAuth, err := sess.deriveKeys(0)
+	if err != nil {
+		t.Fatalf("deriveKeys(0): %v", err)
+	}
+
+	if !bytes.Equal(sess.encKey, wantEnc) {
+		t.Errorf("cached encKey differs from deriveKeys(0)")
+	}
+	if !bytes.Equal(sess.saltKey, wantSalt) {
+		t.Errorf("cached saltKey differs from deriveKeys(0)")
+	}
+	if !bytes.Equal(sess.authorKey, wantAuth) {
+		t.Errorf("cached authorKey differs from deriveKeys(0)")
+	}
+}
+
+// TestSRTPEncryptDecrypt_CachedKeys verifies that the cached-key path produces
+// the same encrypt/decrypt result as the key-derivation path (full round-trip).
+// This implicitly tests that protect() + DecryptPacket() both use cached keys correctly.
+func TestSRTPEncryptDecrypt_CachedKeys_MultiplePackets(t *testing.T) {
+	keyBytes := generateSRTPKey(t)
+	cfg := &SRTPConfig{
+		MasterKey:  keyBytes[:16],
+		MasterSalt: keyBytes[16:],
+		Profile:    "AES_CM_128_HMAC_SHA1_80",
+	}
+
+	const ssrc = uint32(0x11223344)
+	sender, err := NewSRTPSenderSession(cfg, ssrc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiver, err := NewSRTPReceiverSession(cfg, ssrc)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Encrypt and decrypt 10 packets to verify caching works across multiple packets.
+	for i := uint16(0); i < 10; i++ {
+		payload := make([]byte, 160)
+		payload[0] = byte(i) // distinguish each packet
+		raw := buildMinimalRTP(ssrc, i, uint32(i)*160, 0, payload)
+
+		encrypted, err := sender.EncryptPacket(raw)
+		if err != nil {
+			t.Fatalf("packet %d: encrypt: %v", i, err)
+		}
+
+		decrypted, err := receiver.DecryptPacket(encrypted)
+		if err != nil {
+			t.Fatalf("packet %d: decrypt: %v", i, err)
+		}
+
+		// Verify first byte of recovered payload matches
+		if decrypted[12] != byte(i) {
+			t.Errorf("packet %d: payload mismatch: want %d, got %d", i, i, decrypted[12])
+		}
+	}
+}
+
+// TestParseSRTPConfig_PipeStripped verifies that a crypto-suite suffix after '|' is stripped.
+func TestParseSRTPConfig_PipeStripped(t *testing.T) {
+	zeros := make([]byte, 30)
+	b64 := encodeBase64(zeros)
+
+	// Append a pipe + MKI (should be stripped)
+	_, err := ParseSRTPConfig("inline:" + b64 + "|2^20|1:1")
+	if err != nil {
+		t.Fatalf("pipe-suffixed key should parse fine: %v", err)
+	}
 }

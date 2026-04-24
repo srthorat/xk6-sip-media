@@ -22,6 +22,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -50,6 +51,13 @@ type SRTPSession struct {
 	index   uint64 // packet index (48-bit: 16-bit rollover count + 16-bit seq)
 	lastSeq uint16
 	encrypt bool // true = sender; false = receiver
+
+	// Session keys cached at construction (kdr=0 ⟹ keys never change).
+	// Avoids per-packet key derivation and aes.NewCipher overhead.
+	encKey    []byte
+	saltKey   []byte
+	authorKey []byte
+	encBlock  cipher.Block // AES block cipher keyed with encKey
 }
 
 // ParseSRTPConfig parses the inline key-salt from an SDP a=crypto value.
@@ -64,7 +72,7 @@ func ParseSRTPConfig(inline string) (*SRTPConfig, error) {
 	b64 := inline[len(prefix):]
 
 	// Strip any trailing pipe-delimited lifetime/MKI
-	if idx := indexByte(b64, '|'); idx >= 0 {
+	if idx := strings.IndexByte(b64, '|'); idx >= 0 {
 		b64 = b64[:idx]
 	}
 
@@ -88,7 +96,11 @@ func NewSRTPSenderSession(cfg *SRTPConfig, ssrc uint32) (*SRTPSession, error) {
 	if err := validateConfig(cfg); err != nil {
 		return nil, err
 	}
-	return &SRTPSession{cfg: *cfg, ssrc: ssrc, encrypt: true}, nil
+	s := &SRTPSession{cfg: *cfg, ssrc: ssrc, encrypt: true}
+	if err := s.initKeys(); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 // NewSRTPReceiverSession creates an SRTP session for the inbound (receiver) direction.
@@ -96,7 +108,29 @@ func NewSRTPReceiverSession(cfg *SRTPConfig, ssrc uint32) (*SRTPSession, error) 
 	if err := validateConfig(cfg); err != nil {
 		return nil, err
 	}
-	return &SRTPSession{cfg: *cfg, ssrc: ssrc, encrypt: false}, nil
+	s := &SRTPSession{cfg: *cfg, ssrc: ssrc, encrypt: false}
+	if err := s.initKeys(); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// initKeys derives and caches session encryption, salt, and auth keys.
+// Called once at construction — since kdr=0 keys are constant for the session.
+func (s *SRTPSession) initKeys() error {
+	encKey, saltKey, authKey, err := s.deriveKeys(0)
+	if err != nil {
+		return fmt.Errorf("srtp: derive session keys: %w", err)
+	}
+	block, err := aes.NewCipher(encKey)
+	if err != nil {
+		return fmt.Errorf("srtp: init AES block: %w", err)
+	}
+	s.encKey = encKey
+	s.saltKey = saltKey
+	s.authorKey = authKey
+	s.encBlock = block
+	return nil
 }
 
 // EncryptPacket authenticates and encrypts a raw RTP packet in-place.
@@ -126,14 +160,8 @@ func (s *SRTPSession) DecryptPacket(srtp []byte) ([]byte, error) {
 	seq := binary.BigEndian.Uint16(srtp[2:4])
 	index := s.estimateIndex(seq)
 
-	// Derive session keys
-	encKey, _, authKey, err := s.deriveKeys(index)
-	if err != nil {
-		return nil, err
-	}
-
-	// Verify auth tag
-	mac := hmac.New(sha1.New, authKey) //nolint:gosec
+	// Verify auth tag using cached authKey — no per-packet key derivation.
+	mac := hmac.New(sha1.New, s.authorKey) //nolint:gosec
 	mac.Write(authData)
 	expected := mac.Sum(nil)[:10]
 	if !hmac.Equal(expected, authTag) {
@@ -145,10 +173,10 @@ func (s *SRTPSession) DecryptPacket(srtp []byte) ([]byte, error) {
 	payload := make([]byte, len(srtp)-12-10)
 	copy(payload, srtp[12:len(srtp)-10])
 
+	// Use cached AES block — avoids aes.NewCipher + key derivation per packet.
 	ks := deriveIV(s.cfg.MasterSalt, uint32(s.ssrc), index)
-	if err := aesCMCrypt(encKey, ks, payload); err != nil {
-		return nil, err
-	}
+	stream := cipher.NewCTR(s.encBlock, ks)
+	stream.XORKeyStream(payload, payload)
 
 	result := make([]byte, len(header)+len(payload))
 	copy(result, header)
@@ -159,23 +187,18 @@ func (s *SRTPSession) DecryptPacket(srtp []byte) ([]byte, error) {
 // ── Internals ─────────────────────────────────────────────────────────────
 
 func (s *SRTPSession) protect(raw []byte, index uint64) ([]byte, error) {
-	encKey, _, authKey, err := s.deriveKeys(index)
-	if err != nil {
-		return nil, err
-	}
-
 	// Encrypt payload (AES-CM, payload starts at byte 12)
 	enc := make([]byte, len(raw))
 	copy(enc, raw)
 	payload := enc[12:]
 
+	// Use cached AES block — avoids aes.NewCipher + key derivation per packet.
 	ks := deriveIV(s.cfg.MasterSalt, uint32(s.ssrc), index)
-	if err := aesCMCrypt(encKey, ks, payload); err != nil {
-		return nil, err
-	}
+	stream := cipher.NewCTR(s.encBlock, ks)
+	stream.XORKeyStream(payload, payload)
 
 	// Append HMAC-SHA1-80 authentication tag
-	mac := hmac.New(sha1.New, authKey) //nolint:gosec
+	mac := hmac.New(sha1.New, s.authorKey) //nolint:gosec
 	mac.Write(enc)
 	tag := mac.Sum(nil)[:10] // truncate to 80 bits
 	return append(enc, tag...), nil
@@ -279,17 +302,6 @@ func deriveIV(salt []byte, ssrc uint32, index uint64) []byte {
 	return iv
 }
 
-// aesCMCrypt performs AES Counter Mode encryption/decryption in-place.
-func aesCMCrypt(key, iv, data []byte) error {
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return fmt.Errorf("srtp: AES cipher: %w", err)
-	}
-	stream := cipher.NewCTR(block, iv)
-	stream.XORKeyStream(data, data)
-	return nil
-}
-
 func validateConfig(cfg *SRTPConfig) error {
 	if cfg == nil {
 		return fmt.Errorf("srtp: config is nil")
@@ -301,15 +313,6 @@ func validateConfig(cfg *SRTPConfig) error {
 		return fmt.Errorf("srtp: master salt must be 14 bytes, got %d", len(cfg.MasterSalt))
 	}
 	return nil
-}
-
-func indexByte(s string, c byte) int {
-	for i := 0; i < len(s); i++ {
-		if s[i] == c {
-			return i
-		}
-	}
-	return -1
 }
 
 // ── SRTP-aware Stream ─────────────────────────────────────────────────────
@@ -389,7 +392,9 @@ func (p *StreamSRTPPlayer) Tick() bool {
 	}
 
 	if err := p.sess.Send(encrypted); err == nil {
-		p.stats.PacketsSent++
+		p.stats.PacketsSent.Add(1)
+		p.stats.OctetsSent.Add(int64(len(payload)))
+		p.stats.BytesSent.Add(int64(len(encrypted)))
 	}
 
 	return true
@@ -420,6 +425,7 @@ func ReceiveSRTP(conn *net.UDPConn, srtp *SRTPSession, stats *RTPStats, recorder
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				continue
 			}
+			stats.RecvErrors.Add(1)
 			continue
 		}
 
@@ -435,6 +441,7 @@ func ReceiveSRTP(conn *net.UDPConn, srtp *SRTPSession, stats *RTPStats, recorder
 
 		arrival := time.Now()
 		stats.update(pkt.SequenceNumber, arrival)
+		stats.BytesReceived.Add(int64(n))
 
 		if jb != nil && len(pkt.Payload) > 0 {
 			jb.Push(&pkt)

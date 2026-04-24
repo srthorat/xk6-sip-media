@@ -127,16 +127,18 @@ func (h *CallHandle) startFinalize() {
 		h.wg.Wait() // wait for sender + receiver to exit
 
 		// Compute quality metrics
-		lossPercent := h.recvStats.PacketLossPercent()
-		mos := corertp.CalculateMOS(lossPercent, h.recvStats.Jitter)
+		snap := h.recvStats.Snapshot()
+		mos := corertp.CalculateMOS(snap.PacketLossPct, snap.Jitter)
 		var rtcpStats corertp.RTCPStats
 		if h.rtcpSess != nil {
 			rtcpStats = h.rtcpSess.Stats()
 		}
 
 		var silenceRatio float64
+		var recorderDrops int
 		if h.recorder != nil {
 			silenceRatio = audio.SilenceRatioBytes(h.recorder.Bytes())
+			recorderDrops = int(h.recorder.DroppedFrames.Load())
 			h.recorder.Close()
 			if h.recPath != "" {
 				_ = os.Remove(h.recPath)
@@ -145,38 +147,29 @@ func (h *CallHandle) startFinalize() {
 
 		h.mu.Lock()
 		h.result = corertp.CallResult{
-			PacketsSent:        h.sendStats.PacketsSent,
-			PacketsReceived:    h.recvStats.PacketsReceived,
-			PacketsLost:        h.recvStats.PacketsLost,
-			Jitter:             h.recvStats.Jitter,
-			PacketLossPct:      lossPercent,
+			PacketsSent:        int(h.sendStats.PacketsSent.Load()),
+			PacketsReceived:    snap.PacketsReceived,
+			PacketsLost:        snap.PacketsLost,
+			Jitter:             snap.Jitter,
+			PacketLossPct:      snap.PacketLossPct,
 			MOS:                mos,
 			SilenceRatio:       silenceRatio,
 			RTTMs:              rtcpStats.RTTMs,
 			RTCPFractionLost:   rtcpStats.FractionLost,
 			RTCPCumulativeLost: rtcpStats.CumulativeLost,
+			RecvErrors:         snap.RecvErrors,
+			RecorderDrops:      recorderDrops,
+			BytesSent:          h.sendStats.BytesSent.Load(),
+			BytesReceived:      snap.BytesReceived,
 		}
 		h.mu.Unlock()
 
+		_ = h.cod.Close() // release CGO codec resources (Opus/G.729)
 		h.conn.Close()
 		h.sipClient.Close()
 
 		close(h.done) // signal Result() + WaitDone() waiters
 	}()
-}
-
-// stopAndWait is called when the remote sends BYE first — we mark inactive
-// and let the finalize goroutine handle the rest.
-func (h *CallHandle) stopAndWait() {
-	h.mu.Lock()
-	h.active = false
-	h.mu.Unlock()
-
-	select {
-	case <-h.stop:
-	default:
-		close(h.stop)
-	}
 }
 
 // dialogID returns a string uniquely identifying this call's SIP dialog.

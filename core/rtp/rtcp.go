@@ -45,6 +45,7 @@ type RTCPSession struct {
 	conn       *net.UDPConn
 	remoteAddr *net.UDPAddr
 	ssrc       uint32
+	sampleRate uint32 // RTP clock rate (Hz); used to convert jitter ms → RTP ts units
 	stats      *RTCPStats
 	statsMu    sync.Mutex // protects stats
 	rtpStats   *RTPStats
@@ -53,10 +54,14 @@ type RTCPSession struct {
 }
 
 // NewRTCPSession creates an RTCPSession bound to rtcpPort (rtpPort + 1).
+// sampleRate is the codec clock rate in Hz (e.g. 8000 for PCMU/PCMA/G722/G729,
+// 48000 for Opus). It is used to convert jitter from milliseconds to RTP
+// timestamp units as required by RFC 3550 §6.4.1.
 func NewRTCPSession(
 	localAddr *net.UDPAddr,
 	remoteAddr *net.UDPAddr,
 	ssrc uint32,
+	sampleRate uint32,
 	rtpStats *RTPStats,
 	sendStats *SendStats,
 ) (*RTCPSession, error) {
@@ -64,11 +69,15 @@ func NewRTCPSession(
 	if err != nil {
 		return nil, err
 	}
+	if sampleRate == 0 {
+		sampleRate = 8000 // safe default: covers PCMU/PCMA/G722/G729
+	}
 
 	return &RTCPSession{
 		conn:       conn,
 		remoteAddr: remoteAddr,
 		ssrc:       ssrc,
+		sampleRate: sampleRate,
 		stats:      &RTCPStats{SendSSRC: ssrc},
 		rtpStats:   rtpStats,
 		sendStats:  sendStats,
@@ -122,7 +131,8 @@ func (s *RTCPSession) buildSR() []byte {
 	ntpCompact := uint32(ntpSec<<16) | uint32(ntpFrac>>16)
 
 	s.statsMu.Lock()
-	sent := s.sendStats.PacketsSent
+	sent := uint32(s.sendStats.PacketsSent.Load())
+	octets := uint32(s.sendStats.OctetsSent.Load())
 	s.stats.LastSRNTPCompact = ntpCompact
 	s.stats.LastSRReceived = now
 	s.statsMu.Unlock()
@@ -138,8 +148,8 @@ func (s *RTCPSession) buildSR() []byte {
 	binary.BigEndian.PutUint32(buf[8:12], ntpSec)
 	binary.BigEndian.PutUint32(buf[12:16], ntpFrac)
 	binary.BigEndian.PutUint32(buf[16:20], uint32(now.UnixNano()/125000)) // RTP ts approx
-	binary.BigEndian.PutUint32(buf[20:24], uint32(sent))
-	binary.BigEndian.PutUint32(buf[24:28], uint32(sent)*160) // octets (PCMU: 160 bytes/pkt)
+	binary.BigEndian.PutUint32(buf[20:24], sent)
+	binary.BigEndian.PutUint32(buf[24:28], octets)
 
 	return buf
 }
@@ -151,6 +161,9 @@ func (s *RTCPSession) buildRR() []byte {
 	if s.rtpStats == nil {
 		return nil
 	}
+
+	// Use Snapshot() — RTP receive stats are written concurrently by the receiver goroutine.
+	snap := s.rtpStats.Snapshot()
 
 	buf := make([]byte, 32) // RR header (8) + one report block (24)
 
@@ -165,17 +178,28 @@ func (s *RTCPSession) buildRR() []byte {
 	rb := buf[8:]
 	binary.BigEndian.PutUint32(rb[0:4], s.stats.SendSSRC)
 
-	loss := s.rtpStats.PacketLossPercent()
-	frac := uint8(math.Round(loss * 2.56)) // fraction lost = loss% × 256/100
-	rb[4] = frac
+	// RFC 3550 §6.4.1: fraction lost is floor(loss% × 256/100), clamped to [0,255].
+	fractionLost := snap.PacketLossPct * 256 / 100
+	if fractionLost < 0 {
+		fractionLost = 0
+	}
+	frac := uint32(math.Floor(fractionLost))
+	if frac > 255 {
+		frac = 255
+	}
+	rb[4] = uint8(frac)
 
-	cumLost := s.rtpStats.PacketsLost
+	cumLost := snap.PacketsLost
 	rb[5] = byte(cumLost >> 16)
 	rb[6] = byte(cumLost >> 8)
 	rb[7] = byte(cumLost)
 
-	binary.BigEndian.PutUint32(rb[8:12], uint32(s.rtpStats.PacketsReceived))
-	binary.BigEndian.PutUint32(rb[12:16], uint32(s.rtpStats.Jitter))
+	// Extended highest sequence number received (RFC 3550 §6.4.1 field 5).
+	binary.BigEndian.PutUint32(rb[8:12], snap.HighestSeqExtended)
+	// Interarrival jitter in RTP timestamp units (RFC 3550 §6.4.1).
+	// RTPStats stores jitter in milliseconds; convert: ts_units = ms × (sampleRate/1000).
+	jitterTS := uint32(math.Round(snap.Jitter * float64(s.sampleRate) / 1000))
+	binary.BigEndian.PutUint32(rb[12:16], jitterTS)
 
 	// LSR / DLSR (last SR + delay since last SR)
 	s.statsMu.Lock()
@@ -235,9 +259,9 @@ func (s *RTCPSession) parseSR(data []byte) {
 	if len(data) < 28 {
 		return
 	}
-	ntpCompact := (uint32(data[8]) << 24) | (uint32(data[9]) << 16) |
-		(uint32(data[10]) << 8) | uint32(data[11])
-	ntpCompact = (ntpCompact << 16) | (uint32(data[12]) << 8) | uint32(data[13])
+	// Compact NTP: middle 32 bits of the 8-byte NTP timestamp in the SR.
+	// NTP timestamp starts at byte 8 of the SR; bytes 10-13 are the compact form.
+	ntpCompact := binary.BigEndian.Uint32(data[10:14])
 
 	s.statsMu.Lock()
 	s.stats.LastSRNTPCompact = ntpCompact
@@ -264,8 +288,9 @@ func (s *RTCPSession) parseRR(data []byte) {
 
 	// RTT = now - LSR - DLSR (RFC 3550 §6.4.1)
 	now := time.Now()
-	nowNTP, _ := toNTP(now)
-	nowCompact := uint32(nowNTP<<16 | nowNTP>>16) // middle 32 bits
+	nowSec, nowFrac := toNTP(now)
+	// Compact NTP: lower 16 bits of seconds | upper 16 bits of fraction.
+	nowCompact := (nowSec&0xFFFF)<<16 | nowFrac>>16
 	rttUnits := nowCompact - lsr - dlsr
 	rttMs := float64(rttUnits) / 65.536 // convert 1/65536 s → ms
 

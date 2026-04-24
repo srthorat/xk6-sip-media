@@ -8,12 +8,6 @@ import (
 	pionrtp "github.com/pion/rtp"
 )
 
-// fakeRecorder collects Write calls for inspection.
-type fakeRecorder struct {
-	mu     sync.Mutex
-	chunks [][]byte
-}
-
 func newFakeRecorder() *AudioRecorder {
 	// Use the real recorder with empty path (in-memory)
 	r, _ := NewRecorder("")
@@ -196,6 +190,129 @@ func TestJitterBuffer_CloseFlushesThenRemovesFromReactor(t *testing.T) {
 	alive := jb.Tick()
 	if alive {
 		t.Error("Tick after Close() should return false to signal Reactor removal")
+	}
+}
+
+// TestJitterBuffer_DoubleClose verifies that calling Close() twice does not panic.
+// The sync.Once guard prevents closing an already-closed channel.
+func TestJitterBuffer_DoubleClose(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("double Close() panicked: %v", r)
+		}
+	}()
+	rec := newFakeRecorder()
+	jb := &JitterBuffer{
+		packets:  make(map[uint16]*pionrtp.Packet),
+		recorder: rec,
+		stop:     make(chan struct{}),
+	}
+	jb.Close()
+	jb.Close() // must not panic
+}
+
+// TestJitterBuffer_PlayoutDelay_HoldsPackets verifies that when playoutDelay > 0,
+// the jitter buffer does NOT play any packets until the delay has elapsed.
+func TestJitterBuffer_PlayoutDelay_HoldsPackets(t *testing.T) {
+	rec := newFakeRecorder()
+	jb := &JitterBuffer{
+		packets:      make(map[uint16]*pionrtp.Packet),
+		playoutDelay: 500 * time.Millisecond, // long delay for deterministic test
+		recorder:     rec,
+		stop:         make(chan struct{}),
+		silenceSize:  0, // suppress PLC
+	}
+
+	jb.Push(makePacket(0, []byte("early-frame")))
+
+	// Tick immediately — delay not expired, so nothing should be written.
+	jb.Tick()
+
+	if got := len(rec.Bytes()); got != 0 {
+		t.Errorf("playout delay: expected 0 bytes written before delay expires, got %d", got)
+	}
+}
+
+// TestJitterBuffer_PlayoutDelay_PlaysAfterDelay verifies packets play out once
+// the playout delay has elapsed.
+func TestJitterBuffer_PlayoutDelay_PlaysAfterDelay(t *testing.T) {
+	rec := newFakeRecorder()
+
+	const payload = "hello"
+	jb := &JitterBuffer{
+		packets:      make(map[uint16]*pionrtp.Packet),
+		playoutDelay: 10 * time.Millisecond, // short, will expire quickly
+		recorder:     rec,
+		stop:         make(chan struct{}),
+		silenceSize:  0,
+		nextSeq:      1,
+		started:      true,
+		delayExpired: false,
+		firstPktTime: time.Now().Add(-50 * time.Millisecond), // simulate delay already passed
+	}
+
+	jb.Push(makePacket(1, []byte(payload)))
+	jb.Tick()
+
+	if got := len(rec.Bytes()); got != len(payload) {
+		t.Errorf("playout after delay: expected %d bytes, got %d", len(payload), got)
+	}
+}
+
+// TestJitterBuffer_PlayoutDelay_ZeroIsImmediate verifies that playoutDelay=0
+// means packets play immediately on first Tick (no delay gate).
+func TestJitterBuffer_PlayoutDelay_ZeroIsImmediate(t *testing.T) {
+	rec := newFakeRecorder()
+	jb := &JitterBuffer{
+		packets:      make(map[uint16]*pionrtp.Packet),
+		playoutDelay: 0,
+		recorder:     rec,
+		stop:         make(chan struct{}),
+		silenceSize:  0,
+	}
+	jb.Push(makePacket(42, []byte("immediate")))
+	jb.Tick()
+
+	if got := len(rec.Bytes()); got != len("immediate") {
+		t.Errorf("zero playout delay: expected %d bytes, got %d", len("immediate"), got)
+	}
+}
+
+// TestJitterBuffer_FlushDoesNotLoop verifies the Close() flush path iterates the
+// map directly (O(n)) rather than looping up to 65535 times over sequence space.
+// With a sparse map (seq 0 and seq 40000), the old seq-walk would spin ~40000
+// iterations; the new map-range is always O(len(map)).
+func TestJitterBuffer_FlushDoesNotLoop(t *testing.T) {
+	rec := newFakeRecorder()
+	jb := &JitterBuffer{
+		packets:      make(map[uint16]*pionrtp.Packet),
+		playoutDelay: 0,
+		recorder:     rec,
+		stop:         make(chan struct{}),
+		nextSeq:      0,
+		started:      true,
+		silenceSize:  0,
+	}
+
+	// Insert two packets with a large gap — simulates sparse map.
+	jb.packets[0] = makePacket(0, []byte("pkt-zero"))
+	jb.packets[40000] = makePacket(40000, []byte("pkt-far"))
+
+	jb.Close()
+	start := time.Now()
+	alive := jb.Tick() // triggers close-branch flush
+	elapsed := time.Since(start)
+
+	if alive {
+		t.Error("Tick after Close() should return false")
+	}
+	// With map-range flush the total payload written is 8+7=15 bytes.
+	if got := len(rec.Bytes()); got != 8+7 {
+		t.Errorf("flush: expected 15 bytes (both payloads), got %d", got)
+	}
+	// Should complete in well under 1ms — the old O(65535) loop would take ~1ms+.
+	if elapsed > 10*time.Millisecond {
+		t.Errorf("flush took too long (%v), expected < 10ms (old O(65535) loop?)", elapsed)
 	}
 }
 

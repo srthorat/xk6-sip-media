@@ -83,13 +83,12 @@ func LoadPCAP(path string) ([]PCAPFrame, uint8, error) {
 			continue
 		}
 
-		payload := rtp[12:]
 		// Skip CSRC list
 		cc := int(rtp[0] & 0x0F)
 		if len(rtp) < 12+cc*4 {
 			continue
 		}
-		payload = rtp[12+cc*4:]
+		payload := rtp[12+cc*4:]
 		// Skip extension header
 		if rtp[0]&0x10 != 0 && len(payload) >= 4 {
 			extLen := int(binary.BigEndian.Uint16(payload[2:4]))*4 + 4

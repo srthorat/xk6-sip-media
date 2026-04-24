@@ -7,7 +7,7 @@ build:
 	@echo "Installing xk6..."
 	@go install go.k6.io/xk6/cmd/xk6@latest
 	@echo "Building custom k6 binary with xk6-sip-media extension..."
-	@$(XK6_BIN) build --with xk6-sip-media=.
+	@$(XK6_BIN) build --cgo --with xk6-sip-media=.
 
 run: build
 	@echo "Running root script.js..."
@@ -15,7 +15,7 @@ run: build
 
 test:
 	@echo "Running tests..."
-	go test ./... -v -count=1
+	CGO_ENABLED=1 CGO_LDFLAGS="-Wl,-w" go test -v -race -count=1 ./...
 
 format:
 	@echo "Formatting code..."

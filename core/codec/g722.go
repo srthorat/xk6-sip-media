@@ -27,24 +27,11 @@ type g722State struct {
 	sl  int32
 	dl  int32
 	el  int32
-	rl  int32
-	ssl int32
-	sul int32
-	al  [3]int32
-	bl  [7]int32
 	det [2]int32 // det[0]=lower, det[1]=upper
-	nbl int32
 
 	// Upper subband (4-8kHz)
-	su  int32
-	du  int32
-	eu  int32
-	ru  int32
-	ssu int32
-	suu int32
-	au  [3]int32
-	bu  [7]int32
-	nbu int32
+	su int32
+	du int32
 }
 
 type g722Encoder struct {
@@ -100,10 +87,6 @@ func (d *g722Decoder) decode(frame []byte) []int16 {
 }
 
 // ── Simplified ADPCM step tables (ITU-T G.722 Annex A) ──────────────────
-
-var qmfCoeffsLow = [...]int32{
-	3, -11, 12, 32, -210, 951, 3876, -805, 362, -156, 53, -11,
-}
 
 func adpcmEncodeLow(s *g722State, xL int32) int32 {
 	el := xL - s.sl

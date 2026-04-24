@@ -20,9 +20,10 @@ func SilenceRatio(samples []int16) float64 {
 	return float64(silent) / float64(len(samples))
 }
 
-// SilenceRatioBytes decodes raw PCMU bytes back to approximate PCM energy
+// SilenceRatioBytes decodes raw PCMU-encoded bytes back to approximate PCM energy
 // and returns the silence ratio.
-// Note: this is an approximation — full PCMU decoding belongs in the codec package.
+// NOTE: This function is PCMU (μ-law) specific. 0xFF/0x7F are the μ-law representations
+// of silence. It will return incorrect results for PCMA, Opus, or G.729 encoded data.
 func SilenceRatioBytes(pcmu []byte) float64 {
 	if len(pcmu) == 0 {
 		return 1.0

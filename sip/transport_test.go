@@ -1,6 +1,7 @@
 package sip
 
 import (
+	"net"
 	"strings"
 	"testing"
 )
@@ -111,5 +112,43 @@ func TestBuildTLSConfig_ServerName(t *testing.T) {
 	}
 	if tlsConf.ServerName != "pbx.example.com" {
 		t.Errorf("ServerName=%q, want %q", tlsConf.ServerName, "pbx.example.com")
+	}
+}
+
+// ── resolveLocalIP (fix 6.2) ──────────────────────────────────────────────────
+
+// TestResolveLocalIP_Empty verifies that resolveLocalIP("") returns a non-empty
+// valid IP address (auto-detected from the routing table).
+func TestResolveLocalIP_Empty(t *testing.T) {
+	got := resolveLocalIP("")
+	if got == "" {
+		t.Fatal("resolveLocalIP(\"\") returned empty string")
+	}
+	ip := net.ParseIP(got)
+	if ip == nil {
+		t.Errorf("resolveLocalIP returned non-IP %q", got)
+	}
+}
+
+// TestResolveLocalIP_Passthrough verifies that a pre-set IP is returned unchanged.
+func TestResolveLocalIP_Passthrough(t *testing.T) {
+	const fixed = "192.168.1.42"
+	got := resolveLocalIP(fixed)
+	if got != fixed {
+		t.Errorf("resolveLocalIP(%q) = %q; want passthrough", fixed, got)
+	}
+}
+
+// TestResolveLocalIP_MatchesAuto verifies that resolveLocalIP and
+// resolveLocalIPAuto(localIP, false) return identical results — confirming that
+// resolveLocalIP is a thin delegate rather than a separate implementation.
+func TestResolveLocalIP_MatchesAuto(t *testing.T) {
+	for _, input := range []string{"", "10.0.0.1"} {
+		fromShort := resolveLocalIP(input)
+		fromAuto := resolveLocalIPAuto(input, false)
+		if fromShort != fromAuto {
+			t.Errorf("resolveLocalIP(%q)=%q differs from resolveLocalIPAuto(%q, false)=%q",
+				input, fromShort, input, fromAuto)
+		}
 	}
 }

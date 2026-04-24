@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 
@@ -80,6 +81,18 @@ func NewClientWithTransport(localHost, transport string, tlsCfg *TLSConfig) (*Cl
 	if err != nil {
 		return nil, fmt.Errorf("sip: create UA: %w", err)
 	}
+
+	// Suppress the "UnhandledResponseHandler handler not added" warning that
+	// sipgo logs whenever a 100 Trying arrives outside an active client
+	// transaction (e.g. retransmitted after the transaction already completed).
+	// Only 1xx provisionals are silently dropped; unexpected final responses
+	// are emitted at slog.Debug level so real transaction bugs remain diagnosable
+	// without polluting normal output.
+	ua.TransactionLayer().UnhandledResponseHandler(func(resp *sipmsg.Response) {
+		if resp.StatusCode >= 200 {
+			slog.Debug("[sip] unhandled response", "status", resp.StatusCode, "reason", resp.Reason)
+		}
+	})
 
 	client, err := sipgo.NewClient(ua,
 		sipgo.WithClientHostname(localHost),
@@ -173,17 +186,9 @@ func localOutboundIP() (string, error) {
 	return conn.LocalAddr().(*net.UDPAddr).IP.String(), nil
 }
 
-// resolveLocalIP returns localIP if it is not "0.0.0.0" or empty,
-// otherwise auto-detects the outbound interface IP.
+// resolveLocalIP returns localIP if non-empty and not a wildcard,
+// otherwise auto-detects the outbound interface IP (IPv4 only).
+// It delegates to resolveLocalIPAuto which handles both IPv4 and IPv6 wildcards.
 func resolveLocalIP(localIP string) string {
-	if localIP != "" && localIP != "0.0.0.0" {
-		return localIP
-	}
-	ip, _ := localOutboundIP()
-	return ip
-}
-
-// makeFromURI constructs a SIP from URI for the given local host.
-func makeFromURI(localHost string) sipmsg.Uri {
-	return sipmsg.Uri{User: "k6load", Host: localHost}
+	return resolveLocalIPAuto(localIP, false)
 }
