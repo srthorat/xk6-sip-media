@@ -151,6 +151,9 @@ func (s *Server) handleInvite(req *sipmsg.Request, tx sipmsg.ServerTransaction) 
 		_ = tx.Respond(sipmsg.NewResponseFromRequest(req, 415, "Unsupported Media Type", nil))
 		return
 	}
+	defer func() {
+		_ = cod.Close()
+	}()
 
 	// Parse caller's SDP offer
 	remoteSDP := string(req.Body())
