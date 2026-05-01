@@ -49,11 +49,11 @@ type CallHandle struct {
 	done chan struct{}  // closed after finalize() completes; safe to read Result()
 
 	// ── state ──────────────────────────────────────────────────────────────
-	mu       sync.Mutex
-	active   bool // false after Hangup() or remote BYE
-	onHold   bool
-	result   corertp.CallResult
-	sdpVer   atomic.Uint64 // RFC 4566 §5.2: session-version increments on each re-INVITE
+	mu     sync.Mutex
+	active bool // false after Hangup() or remote BYE
+	onHold bool
+	result corertp.CallResult
+	sdpVer atomic.Uint64 // RFC 4566 §5.2: session-version increments on each re-INVITE
 }
 
 // IsActive returns true if the call is still connected.

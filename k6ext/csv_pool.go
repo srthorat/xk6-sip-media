@@ -28,9 +28,9 @@ type csvRow map[string]string
 
 // K6CredentialPool holds all parsed rows and is safe for concurrent VU access.
 type K6CredentialPool struct {
-	rows     []csvRow
-	mode     string // "sequential" | "random"
-	counter  atomic.Int64
+	rows    []csvRow
+	mode    string // "sequential" | "random"
+	counter atomic.Int64
 }
 
 // loadCSVFile parses a CSV file and returns a K6CredentialPool.
