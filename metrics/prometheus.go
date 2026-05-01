@@ -6,9 +6,11 @@
 package metrics
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -60,7 +62,13 @@ func Init() {
 		if port == "" {
 			port = "2112"
 		}
-		addr := ":" + port
+		// Validate port is a numeric value in the valid TCP port range.
+		portNum, err := strconv.Atoi(port)
+		if err != nil || portNum < 1 || portNum > 65535 {
+			log.Print("[prometheus] PROMETHEUS_PORT is not a valid port number (1-65535), using 2112")
+			portNum = 2112
+		}
+		addr := fmt.Sprintf(":%d", portNum)
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.Handler())
 		srv := &http.Server{
@@ -75,6 +83,6 @@ func Init() {
 				log.Printf("[prometheus] server error: %v", err)
 			}
 		}()
-		log.Printf("[prometheus] metrics at http://localhost%s/metrics", addr) //nolint:gosec // G706: addr is ":PORT" format, not user-controlled content
+		log.Printf("[prometheus] metrics at http://localhost:%d/metrics", portNum)
 	})
 }
