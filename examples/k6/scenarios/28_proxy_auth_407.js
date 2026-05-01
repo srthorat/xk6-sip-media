@@ -23,6 +23,7 @@ const REGISTRAR  = __ENV.SIP_REGISTRAR  || 'sip:192.168.1.100';
 const DOMAIN     = __ENV.SIP_DOMAIN     || '192.168.1.100';
 const AOR_PREFIX = __ENV.SIP_AOR_PREFIX || 'sip:user';
 const PASSWORD   = __ENV.SIP_PASSWORD   || 'correct-password';
+const USERNAME   = __ENV.SIP_USERNAME   || ''; // if set, all VUs use this credential instead of user{N}
 
 const proxyAuthSuccess = new Counter('sip_proxy_auth_success');
 const proxyAuthFail    = new Counter('sip_proxy_auth_failure');
@@ -42,8 +43,9 @@ export const options = {
 };
 
 export default function () {
-  const vuID = __VU;
-  const aor = `${AOR_PREFIX}${vuID}@${DOMAIN}`;
+  const vuID    = __VU;
+  const user    = USERNAME || `user${vuID}`;
+  const aor     = __ENV.SIP_AOR || `${AOR_PREFIX}${vuID}@${DOMAIN}`;
 
   let reg;
   try {
@@ -53,7 +55,7 @@ export default function () {
     reg = sip.register({
       registrar: REGISTRAR,
       aor:       aor,
-      username:  `user${vuID}`,
+      username:  user,
       password:  PASSWORD,
     });
   } catch (e) {

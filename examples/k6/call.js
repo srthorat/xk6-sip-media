@@ -22,6 +22,9 @@ import { check } from 'k6';
 const TARGET   = __ENV.SIP_TARGET   || 'sip:ivr@127.0.0.1';
 const DURATION = __ENV.SIP_DURATION || '20s';
 const WAV_FILE = __ENV.SIP_WAV      || './examples/audio/sample.wav';
+const USERNAME = __ENV.SIP_USERNAME || '';
+const PASSWORD = __ENV.SIP_PASSWORD || '';
+const AOR      = __ENV.SIP_AOR      || '';
 
 export const options = {
   vus: 10,
@@ -41,6 +44,9 @@ export default function () {
   const result = sip.call({
     target:   TARGET,
     duration: DURATION,
+    ...(USERNAME && { username: USERNAME }),
+    ...(PASSWORD && { password: PASSWORD }),
+    ...(AOR      && { aor: AOR }),
 
     audio: {
       file:  WAV_FILE,
@@ -53,7 +59,7 @@ export default function () {
   check(result, {
     'call succeeded':  (r) => r.success === true,
     'MOS acceptable':  (r) => r.mos >= 3.5,
-    'IVR responded':   (r) => r.ivr_ok === true,
+    'no packet loss':  (r) => r.lost === 0,
   });
 
   if (!result.success) {

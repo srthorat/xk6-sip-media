@@ -15,9 +15,9 @@ import (
 	"github.com/emiago/sipgo"
 	sipmsg "github.com/emiago/sipgo/sip"
 
-	"xk6-sip-media/core/audio"
-	"xk6-sip-media/core/codec"
-	corertp "xk6-sip-media/core/rtp"
+	"github.com/srthorat/xk6-sip-media/core/audio"
+	"github.com/srthorat/xk6-sip-media/core/codec"
+	corertp "github.com/srthorat/xk6-sip-media/core/rtp"
 )
 
 // ServerConfig holds parameters for the UAS listener.
@@ -267,9 +267,9 @@ func (s *Server) handleInvite(req *sipmsg.Request, tx sipmsg.ServerTransaction) 
 	s.mu.Unlock()
 }
 
-// handleOptions responds to SIP OPTIONS keep-alives (ping).
+// handleOptions responds to SIP OPTIONS keep-alives (ping) per RFC 3261 §11.2.
 func handleOptions(req *sipmsg.Request, tx sipmsg.ServerTransaction) {
 	resp := sipmsg.NewResponseFromRequest(req, 200, "OK", nil)
-	resp.AppendHeader(sipmsg.NewHeader("Allow", "INVITE, ACK, BYE, OPTIONS, INFO"))
+	resp.AppendHeader(sipmsg.NewHeader("Allow", "INVITE, ACK, BYE, CANCEL, OPTIONS, INFO, REFER, MESSAGE"))
 	_ = tx.Respond(resp)
 }

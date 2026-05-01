@@ -7,7 +7,7 @@ import (
 	"github.com/emiago/sipgo"
 	sipmsg "github.com/emiago/sipgo/sip"
 
-	corertp "xk6-sip-media/core/rtp"
+	corertp "github.com/srthorat/xk6-sip-media/core/rtp"
 )
 
 // EarlyMedia holds a provisional media stream established on 183 Session Progress.

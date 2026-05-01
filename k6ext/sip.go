@@ -7,8 +7,8 @@ import (
 	"go.k6.io/k6/js/common"
 	"go.k6.io/k6/metrics"
 
-	corertp "xk6-sip-media/core/rtp"
-	sipcall "xk6-sip-media/sip"
+	corertp "github.com/srthorat/xk6-sip-media/core/rtp"
+	sipcall "github.com/srthorat/xk6-sip-media/sip"
 )
 
 // ── sip.call() ──────────────────────────────────────────────────────────────
@@ -176,6 +176,45 @@ func (m *SIPModule) Options(opts map[string]interface{}) map[string]interface{} 
 		"status":  res.StatusCode,
 		"rtt_ms":  res.RTT.Milliseconds(),
 	}
+}
+
+// ── sip.loadCSV() ───────────────────────────────────────────────────────────
+
+// LoadCSV loads a SIPp-compatible CSV credential file and returns a pool object.
+//
+// CSV format:
+//
+//	SEQUENTIAL                              ← optional mode line (default)
+//	username,password,domain,callee         ← header row (comma or semicolon)
+//	alice,s3cr3t,sip.example.com,18005551234
+//	bob,p4ssw0rd,sip.example.com,18005551234
+//
+// Options (optional second argument):
+//
+//	{ mode: "sequential" | "random" }
+//
+// JS API:
+//
+//	const pool = sip.loadCSV('users.csv');
+//	// In default() — pick by VU id (round-robin, deterministic):
+//	const creds = pool.pick(__VU);
+//	// OR pick by call counter (round-robin across all calls):
+//	const creds = pool.pickRoundRobin();
+//	// OR random:
+//	const creds = pool.pickRandom();
+//
+//	sip.register({ registrar: `sip:${creds.domain}`, aor: `sip:${creds.username}@${creds.domain}`, ...creds });
+//	sip.call({ target: `sip:${creds.callee}@${creds.domain}`, ...creds });
+func (m *SIPModule) LoadCSV(path string, rest ...map[string]interface{}) *K6CredentialPool {
+	opts := map[string]interface{}{}
+	if len(rest) > 0 && rest[0] != nil {
+		opts = rest[0]
+	}
+	pool, err := loadCSVFile(path, opts)
+	if err != nil {
+		common.Throw(m.vu.Runtime(), fmt.Errorf("sip.loadCSV: %w", err))
+	}
+	return pool
 }
 
 // ── sip.conference() ────────────────────────────────────────────────────────

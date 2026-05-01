@@ -1,7 +1,7 @@
 package k6ext
 
 import (
-	sipcall "xk6-sip-media/sip"
+	sipcall "github.com/srthorat/xk6-sip-media/sip"
 )
 
 // K6Registration wraps a *sip.Registration for the k6 JavaScript runtime.

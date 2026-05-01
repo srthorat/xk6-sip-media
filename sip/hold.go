@@ -67,7 +67,9 @@ func (h *CallHandle) Unhold() error {
 // Re-INVITE is used for call hold (inactive), unhold (sendrecv), and
 // mid-call codec changes.
 func (h *CallHandle) sendReINVITE(ctx context.Context, direction string) error {
-	sdp := BuildSDPWithDirection(h.localIP, h.rtpPort, h.cod.PayloadType(), direction)
+	// RFC 4566 §5.2: increment session-version on each SDP modification.
+	ver := h.sdpVer.Add(1)
+	sdp := buildSDP(h.localIP, h.rtpPort, h.cod.PayloadType(), direction, ver)
 
 	// Build re-INVITE — dialog.Do() fills in From/To/Call-ID/CSeq
 	reinvite := sipmsg.NewRequest(sipmsg.INVITE, h.remoteContact())

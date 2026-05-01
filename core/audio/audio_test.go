@@ -3,7 +3,7 @@ package audio_test
 import (
 	"testing"
 
-	"xk6-sip-media/core/audio"
+	"github.com/srthorat/xk6-sip-media/core/audio"
 )
 
 func TestSilenceRatio_AllSilent(t *testing.T) {

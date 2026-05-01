@@ -6,7 +6,7 @@ package sip
 import (
 	"time"
 
-	corertp "xk6-sip-media/core/rtp"
+	corertp "github.com/srthorat/xk6-sip-media/core/rtp"
 )
 
 // CallConfig holds all parameters for a single SIP call.

@@ -4,12 +4,20 @@ package k6ext
 
 import (
 	"fmt"
+	"log/slog"
+	"os"
 	"sync"
 
 	"go.k6.io/k6/js/modules"
 )
 
 func init() {
+	// Suppress WARN-level noise from sipgo's transport layer (e.g.
+	// "UDP ref went negative"). Only ERROR+ from the slog default logger
+	// will be printed. Our own extension logs through k6's console API.
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr,
+		&slog.HandlerOptions{Level: slog.LevelError})))
+
 	modules.Register("k6/x/sip", new(RootModule))
 }
 

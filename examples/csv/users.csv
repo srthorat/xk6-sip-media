@@ -1,0 +1,26 @@
+# xk6-sip-media credential CSV format
+#
+# Line 1 (optional): SEQUENTIAL (default) or RANDOM
+#   SEQUENTIAL  — VU N always uses row (N-1) % total_rows  (deterministic)
+#   RANDOM      — each pick() call returns a uniformly random row
+#
+# Line 2: header row  (comma OR semicolon separated)
+# Line 3+: data rows
+#
+# Column names map directly to sip.call() / sip.register() option keys:
+#   username  → auth username + From/Contact user
+#   password  → digest auth password
+#   domain    → registrar host / SIP domain
+#   callee    → called party number / URI user part
+#   aor       → full Address-of-Record (optional; built from username+domain if absent)
+#
+# Add any extra columns you need — they are passed through as raw strings
+# and accessible on the returned JS object (e.g. creds.customHeader).
+#
+SEQUENTIAL
+username,password,domain,callee
+user1,password1,sip.example.com,1000
+user2,password2,sip.example.com,1000
+user3,password3,sip.example.com,1000
+user4,password4,sip.example.com,1000
+user5,password5,sip.example.com,1000

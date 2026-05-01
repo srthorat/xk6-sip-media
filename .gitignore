@@ -21,6 +21,9 @@ vendor/
 .env
 .env.local
 
+# Credential CSV files (replace with your own values — never commit real creds)
+examples/csv/vonage_users.csv
+
 # IDEs and Editors
 .idea/
 .vscode/

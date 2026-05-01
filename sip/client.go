@@ -66,7 +66,7 @@ func NewClient(localHost string) (*Client, error) {
 //   - tlsCfg:   TLS parameters (required when transport == "tls", ignored otherwise)
 func NewClientWithTransport(localHost, transport string, tlsCfg *TLSConfig) (*Client, error) {
 	var uaOpts []sipgo.UserAgentOption
-	uaOpts = append(uaOpts, sipgo.WithUserAgent("xk6-sip-media/1.0"))
+	uaOpts = append(uaOpts, sipgo.WithUserAgent("github.com/srthorat/xk6-sip-media/1.0"))
 	uaOpts = append(uaOpts, sipgo.WithUserAgentHostname(localHost))
 
 	if transport == TransportTLS {
@@ -116,6 +116,23 @@ func NewClientWithTransport(localHost, transport string, tlsCfg *TLSConfig) (*Cl
 	}
 
 	cache := sipgo.NewDialogClientCache(client, contactHDR)
+
+	// Register a server-side handler on the same UA so that inbound SIP
+	// requests (e.g. OPTIONS keep-alives sent by the carrier/SBC) are answered
+	// rather than silently dropped with "OnRequest handler not added".
+	srv, err := sipgo.NewServer(ua)
+	if err != nil {
+		_ = client.Close()
+		_ = ua.Close()
+		return nil, fmt.Errorf("sip: create server: %w", err)
+	}
+	srv.OnOptions(handleOptions)
+	// Respond 200 OK to any BYE that arrives after our dialog has already
+	// been torn down (e.g. Vonage sends a late BYE after we sent our own BYE).
+	// Without this, sipgo logs "SIP request handler not found method=BYE".
+	srv.OnBye(func(req *sipmsg.Request, tx sipmsg.ServerTransaction) {
+		_ = tx.Respond(sipmsg.NewResponseFromRequest(req, 200, "OK", nil))
+	})
 
 	return &Client{
 		ua:        ua,

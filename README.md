@@ -4,7 +4,7 @@
 [![Go 1.25](https://img.shields.io/badge/Go-1.25-blue)](https://go.dev/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](#)
-[![Scenarios](https://img.shields.io/badge/scenarios-27-orange)](#)
+[![Scenarios](https://img.shields.io/badge/scenarios-29-orange)](#)
 
 > **Production-grade SIP + RTP load testing for [k6](https://k6.io).**  
 > The only k6 extension that tests real SIP signaling, live RTP audio, SRTP encryption, voice quality (MOS/PESQ/RTCP), and complex call flows at any scale — surpassing SIPp in programmability, codec support, and quality observability.
@@ -84,13 +84,13 @@ export default function () {
 | Metric | Status | Notes |
 |---|---|---|
 | E-model MOS (1.0–5.0) | ✅ | Per-call, RFC 3611 |
-| PESQ MOS-LQO | ✅ | Requires `pesq` binary |
+| PESQ MOS-LQO | 🚧 | Records audio; scoring binary not wired yet |
 | RTCP-based jitter | ✅ | Via RTCP RR |
 | RTT (round-trip time) | ✅ | Via RTCP DLSR calculation |
 | Packet loss % | ✅ | RTP sequence gap detection |
 | Silence ratio | ✅ | Energy-based silence detection |
-| IVR validation | ✅ | Rule-based prompt detection |
-| AI transcript (Whisper) | ✅ | Optional Python/openai-whisper |
+| IVR validation | 🚧 | Field present; no rule engine wired yet |
+| AI transcript (Whisper) | 🚧 | Planned; not yet wired |
 
 ---
 
@@ -114,7 +114,7 @@ export default function () {
 
 ```bash
 # Clone the repo
-git clone https://github.com/your-org/xk6-sip-media.git
+git clone https://github.com/srthorat/xk6-sip-media.git
 cd xk6-sip-media
 
 # Build the custom k6 binary (installs xk6 automatically)
@@ -397,60 +397,60 @@ const reg = sip.register({
   tls:       { skipVerify: true },
 });
 
-reg.refresh(3600);
+reg.refresh();
 reg.unregister();
 ```
 
----
-
-### `sip.conference(opts)` — Conference bridge
-
-```javascript
-const conf = sip.conference({ localIP: '0.0.0.0' });
-
-conf.addParticipant({ target: 'sip:alice@pbx', audio: { file: AUDIO } });
-conf.addParticipant({ target: 'sip:bob@pbx',   audio: { file: AUDIO } });
-conf.addParticipant({ target: 'sip:carol@pbx', audio: { file: AUDIO } });
-
-sleep(30);
-conf.hangup();
-
-const result = conf.result();
-// result.mos, result.sent, result.received, result.success
-```
+> **Note:** `sip.dial3pcc()` and `sip.serve()` are implemented in Go (`sip/threepcc.go`, `sip/server.go`) but are not yet exposed as k6 JavaScript APIs.
 
 ---
 
-### `sip.dial3pcc(opts)` — 3PCC (RFC 3725)
+### `sip.loadCSV(path, opts?)` — Multi-user credential pool
+
+Load a CSV file of SIP credentials and distribute them across VUs. Each row becomes a credential object whose fields map directly to `sip.call()` / `sip.register()` options.
 
 ```javascript
-const session = sip.dial3pcc({
-  partyA:   'sip:alice@pbx',
-  partyB:   'sip:bob@pbx',
-  audioA:   AUDIO,
-  audioB:   AUDIO,
-  duration: '30s',
-});
-session.hangupAll();
+// CSV format (examples/csv/users.csv):
+// SEQUENTIAL          ← or RANDOM
+// username,password,domain,callee
+// alice,secret1,pbx.example.com,1001
+// bob,secret2,pbx.example.com,1001
+
+const pool = sip.loadCSV('examples/csv/users.csv');
+
+export default function () {
+  // Sequential: VU 1 → row 1, VU 2 → row 2, wraps on overflow
+  const creds = pool.pick(__VU);
+
+  // Or: always advance a shared counter (round-robin across all VUs)
+  // const creds = pool.pickRoundRobin();
+
+  // Or: uniformly random row per iteration
+  // const creds = pool.pickRandom();
+
+  sip.call({
+    target:   `sip:${creds.callee}@${creds.domain}`,
+    username: creds.username,
+    password: creds.password,
+    duration: '20s',
+    audio:    { file: './examples/audio/sample.wav' },
+  });
+}
 ```
 
----
+**Pool methods:**
+| Method | Description |
+|---|---|
+| `pool.pick(vuId)` | Row for this VU (sequential or random, based on CSV header) |
+| `pool.pickRoundRobin()` | Next row via shared atomic counter (global round-robin) |
+| `pool.pickRandom()` | Uniformly random row |
+| `pool.len()` | Total number of credential rows |
 
-### `sip.serve(opts)` — UAS mode (answer inbound calls)
-
-```javascript
-const server = sip.serve({
-  listenAddr:    '0.0.0.0:5080',
-  transport:     'udp',
-  audio:         { file: './examples/audio/sample.wav' },
-  maxConcurrent: 200,
-  callDuration:  '30s',
-  echoMode:      false,
-});
-
-sleep(600); // run for 10 minutes
-server.stop();
-```
+**CSV file rules:**
+- First non-comment line: `SEQUENTIAL` (default) or `RANDOM` — sets default pick mode
+- Second line: header row (`username`, `password`, `domain`, `callee`, any extras)
+- Separator: comma or semicolon, auto-detected
+- Extra columns are passed through as strings on the returned object
 
 ---
 
@@ -468,8 +468,11 @@ server.stop();
 | `mos_score` | Trend | Per-call E-model MOS (1.0–5.0) |
 | `sip_transfer_success` | Counter | Successful REFER operations |
 | `sip_register_success` | Counter | Successful REGISTER operations |
-| `sip_conference_legs` | Trend | Active conference legs per room |
-| `sip_auth_bypass` | Counter | Detected auth bypass attempts |
+| `sip_options_success` | Counter | Successful OPTIONS pings |
+| `sip_options_failure` | Counter | Failed OPTIONS pings |
+| `sip_options_rtt_ms` | Trend | OPTIONS round-trip time (ms) |
+| `rtp_bytes_sent` | Counter | RTP bytes transmitted |
+| `rtp_bytes_received` | Counter | RTP bytes received |
 
 ### Threshold examples
 
@@ -611,7 +614,7 @@ k6 cloud examples/k6/scenarios/05_soak.js
 
 ---
 
-## Load Scenarios (27 scripts)
+## Load Scenarios (29 scripts)
 
 ### Batch 1 — Core Load (01–10)
 | # | Scenario | Tests |
@@ -658,6 +661,9 @@ k6 cloud examples/k6/scenarios/05_soak.js
 | 28 | Proxy Auth 407 | SIP Proxy 407 challenge / Digest calculation |
 | 29 | CANCEL Mid-Ring | Trigger `CancelAfter` exactly during provisional `180 Ringing` |
 | 30 | OPTIONS Ping | High frequency connectionless SIP heartbeat checks |
+| 33 | Multi-User CSV | Concurrent calls from CSV credential pool |
+| 34 | CSV Ramp | Ramping VUs with CSV credentials |
+| 35 | CANCEL Load | CANCEL mid-INVITE stress test — validates 487 handling at scale |
 
 ### Base examples (non-numbered)
 | File | Description |
@@ -685,11 +691,12 @@ xk6-sip-media/
 │
 ├── k6ext/                    # k6 JS binding layer
 │   ├── module.go             # RootModule, initialization
-│   ├── sip.go                # call(), dial(), register(), conference(), dial3pcc(), serve()
+│   ├── sip.go                # call(), dial(), register(), conference(), options(), loadCSV()
 │   ├── call_handle.go        # All mid-call methods (hold, transfer, DTMF, etc.)
+│   ├── healthcheck.go        # startHealthCheck() — background OPTIONS loop
 │   ├── conference.go         # Conference JS wrapper
 │   ├── registration.go       # Registration JS wrapper
-│   └── metrics.go            # 12 custom k6 metrics
+│   └── metrics.go            # Custom k6 metrics
 │
 ├── sip/                      # SIP protocol layer
 │   ├── client.go             # UA: UDP / TCP / TLS transport
@@ -707,7 +714,9 @@ xk6-sip-media/
 │   ├── server.go             # UAS: answer inbound calls
 │   ├── info.go               # SIP INFO method
 │   ├── vars.go               # Variable extraction from responses
-│   ├── threepcc.go           # 3PCC orchestration
+│   ├── healthcheck.go        # Background OPTIONS ping loop
+│   ├── threepcc.go           # 3PCC orchestration (Go only; no JS binding yet)
+│   ├── server.go             # UAS: answer inbound calls (Go only; no JS binding yet)
 │   ├── retransmit.go         # RetransmitConfig struct
 │   └── transport_utils.go    # applyRetransmitConfig, sipgo retransmit hook
 │
@@ -715,7 +724,6 @@ xk6-sip-media/
 │   ├── audio/
 │   │   ├── loader.go         # Format-agnostic loader (WAV + MP3, resample, downmix)
 │   │   ├── codec_loader.go   # LoadAudioForCodec (codec-aware sample rate selection)
-│   │   ├── wav_reader.go     # WAV decode + G.711 encoding helpers
 │   │   ├── pcap_reader.go    # Pure-stdlib PCAP parser + IPv6 detect
 │   │   ├── frame.go          # FrameSize constants (8kHz/16kHz)
 │   │   ├── pcm.go            # IntToInt16 helper
@@ -724,28 +732,23 @@ xk6-sip-media/
 │   ├── codec/
 │   │   ├── codec.go          # Codec interface + registry
 │   │   ├── g711.go           # PCMU + PCMA
-│   │   └── g722.go           # G.722 16kHz wideband
+│   │   ├── g722.go           # G.722 16kHz wideband
+│   │   └── opus.go           # Opus 48kHz (CGO, libopus)
 │   │
-│   ├── rtp/
-│   │   ├── session.go        # RTP session: SSRC, sequence, timestamp
-│   │   ├── sender.go         # Stream(): 20ms-paced RTP transmission
-│   │   ├── receiver.go       # Receive(): packet stats tracking
-│   │   ├── echo.go           # Echo(): RTP loopback reflect
-│   │   ├── srtp.go           # SRTP: AES-CM-128-HMAC-SHA1-80 (RFC 3711)
-│   │   ├── rtcp.go           # RTCP: SR + RR + RTT calculation (RFC 3550)
-│   │   ├── dtmf.go           # RFC 2833 telephone-event
-│   │   ├── mos.go            # E-model MOS calculation
-│   │   ├── recorder.go       # PCM recording (for PESQ)
-│   │   └── stats.go          # RTPStats, SendStats, CallResult
-│   │
-│   ├── quality/
-│   │   ├── pesq.go           # PESQ scoring (external binary)
-│   │   └── ivr.go            # IVR rule-based validation
-│   │
-│   └── ai/
-│       └── validator.go      # Whisper STT transcript validation
+│   └── rtp/
+│       ├── session.go        # RTP session: SSRC, sequence, timestamp
+│       ├── sender.go         # Stream(): 20ms-paced RTP transmission
+│       ├── receiver.go       # Receive(): packet stats tracking
+│       ├── echo.go           # Echo(): RTP loopback reflect
+│       ├── srtp.go           # SRTP: AES-CM-128-HMAC-SHA1-80 (RFC 3711)
+│       ├── rtcp.go           # RTCP: SR + RR + RTT calculation (RFC 3550)
+│       ├── dtmf.go           # RFC 2833 telephone-event
+│       ├── mos.go            # E-model MOS calculation
+│       ├── jitter.go         # Adaptive jitter buffer
+│       ├── reactor.go        # Sharded MediaReactor (NumCPU shards)
+│       ├── recorder.go       # PCM recording
+│       └── stats.go          # RTPStats, SendStats, CallResult
 │
-├── session/                  # Call lifecycle tracking
 ├── metrics/                  # Prometheus exporter
 ├── grafana/
 │   └── xk6-sip-dashboard.json  # Production Grafana dashboard (import directly)
@@ -763,7 +766,7 @@ xk6-sip-media/
         ├── transfer_attended.js  # Attended transfer
         ├── register_call.js      # Register then call
         ├── ivr_flow.js           # IVR + AI validation
-        └── scenarios/            # 27 production load scenarios (01–27)
+        └── scenarios/            # 29 load scenarios (01–35)
 ```
 
 ---
@@ -782,17 +785,19 @@ xk6-sip-media/
 | Early media (183) | Partial | ✅ |
 | Attended Transfer | **❌** | ✅ REFER+Replaces |
 | Conference management | **❌** | ✅ multi-leg |
-| 3PCC (RFC 3725) | ✅ XML | ✅ JavaScript |
+| 3PCC (RFC 3725) | ✅ XML | 🚧 Go implementation; JS binding pending |
 | MOS scoring | **❌** | ✅ E-model per call |
-| PESQ scoring | **❌** | ✅ |
+| PESQ scoring | **❌** | 🚧 Planned |
 | RTCP RTT measurement | **❌** | ✅ |
-| AI transcript validation | **❌** | ✅ Whisper |
+| AI transcript validation | **❌** | 🚧 Planned |
 | MP3 audio input | **❌** | ✅ |
 | G.722 wideband | Via PCAP | ✅ native |
 | Grafana dashboard | **❌** | ✅ import-ready JSON |
 | Scripting language | XML | **JavaScript** |
 | Variable extraction | XML `<ereg>` | JS `.responseHeader()` |
 | Prometheus native | File only | **✅ native** |
+| CSV credential pool | ❌ | ✅ `sip.loadCSV()` — sequential, round-robin, or random |
+| Multi-user concurrent calls | Via `-inf` users file | ✅ CSV pool × k6 VUs, no extra tooling |
 
 ---
 
@@ -805,25 +810,30 @@ xk6-sip-media/
 | `github.com/zaf/g711` | v1.4.0 | G.711 µ-law / A-law codecs |
 | `github.com/hajimehoshi/go-mp3` | v0.3.4 | Pure-Go MP3 decoder (no CGO) |
 | `github.com/go-audio/wav` | v1.1.0 | WAV file decoder |
-| `github.com/prometheus/client_golang` | v1.19.1 | Prometheus metrics |
-| `go.k6.io/k6` | v0.59.0 | k6 extension framework |
+| `github.com/prometheus/client_golang` | v1.23.2 | Prometheus metrics |
+| `go.k6.io/k6` | v1.7.1 | k6 extension framework |
 
-All media processing (MP3 decode, PCAP parse, G.722, SRTP, RTCP) implemented in **pure Go — no CGO, no external shared libraries**.
+Most media processing (MP3 decode, PCAP parse, G.722, SRTP, RTCP) is implemented in pure Go. The Opus codec requires CGO and links against `libopus`.
 
 ---
 
 ## Roadmap
 
+### Pre-Release Validation
+- [x] **Infrastructure baseline** — validated with `33_multi_user_csv.js` and `34_multi_user_csv_ramp.js` against Vonage (multi-user CSV pool, concurrent calls, ramp scenarios)
+- [ ] **Performance validation** — verify 1,000+ concurrent calls with SRTP enabled without crashing
+- [ ] **Quality telemetry check** — verify Grafana displays E-model MOS and RTCP jitter correctly under heavy load
+
+### Publication
+- [ ] **k6 Registry submission** — open a PR against `grafana/k6-docs` to list on the official [k6 Extensions Directory](https://k6.io/docs/extensions/)
+
 ### Near-term
 - [ ] **WebSocket / WSS transport** — SIP over WebSocket (RFC 7118), browser SIP clients
 - [ ] **G.729 native codec** — licensed library or arithmetic encoder
-- [ ] **SIP OPTIONS** active health check loop
-- [ ] **CANCEL** mid-INVITE load scenario
 
 ### Medium-term
 - [ ] **Docker image** — pre-built k6 + extension
 - [ ] **k6 cloud distributed guide** — multi-region SIP load generation
-- [ ] **Opus codec** — WebRTC interop
 
 ---
 

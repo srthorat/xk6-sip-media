@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	corertp "xk6-sip-media/core/rtp"
+	corertp "github.com/srthorat/xk6-sip-media/core/rtp"
 )
 
 func TestCalculateMOS_Perfect(t *testing.T) {

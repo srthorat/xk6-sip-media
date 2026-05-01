@@ -26,9 +26,12 @@ import sip from 'k6/x/sip';
 import { check, sleep } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';
 
-const TARGET   = __ENV.SIP_TARGET    || 'sip:ivr@192.168.1.100';
-const AUDIO    = __ENV.SIP_AUDIO     || './examples/audio/sample.wav';
-const USE_INFO = __ENV.DTMF_SIP_INFO === 'true'; // set to use SIP INFO instead of RFC 2833
+const TARGET    = __ENV.SIP_TARGET    || 'sip:ivr@192.168.1.100';
+const AUDIO     = __ENV.SIP_AUDIO     || './examples/audio/sample.wav';
+const USE_INFO  = __ENV.DTMF_SIP_INFO === 'true'; // set to use SIP INFO instead of RFC 2833
+const USERNAME  = __ENV.SIP_USERNAME  || '';
+const PASSWORD  = __ENV.SIP_PASSWORD  || '';
+const AOR       = __ENV.SIP_AOR       || '';
 
 const dtmfOK       = new Counter('dtmf_digit_sent');
 const ivrSuccess   = new Counter('ivr_navigation_success');
@@ -56,6 +59,9 @@ export default function () {
     target:   TARGET,
     audio:    { file: AUDIO },
     duration: '60s',
+    ...(USERNAME && { username: USERNAME }),
+    ...(PASSWORD && { password: PASSWORD }),
+    ...(AOR      && { aor: AOR }),
   });
 
   if (!call) { ivrFail.add(1); return; }

@@ -11,9 +11,9 @@ import (
 
 	sipmsg "github.com/emiago/sipgo/sip"
 
-	"xk6-sip-media/core/audio"
-	"xk6-sip-media/core/codec"
-	corertp "xk6-sip-media/core/rtp"
+	"github.com/srthorat/xk6-sip-media/core/audio"
+	"github.com/srthorat/xk6-sip-media/core/codec"
+	corertp "github.com/srthorat/xk6-sip-media/core/rtp"
 )
 
 // Dial establishes a SIP call and returns a live *CallHandle immediately
@@ -209,19 +209,29 @@ func Dial(cfg CallConfig) (*CallHandle, error) {
 		}
 	}
 
-	// 11. Bind local UDP RTP socket
+	// 11. Bind local UDP RTP socket (retry up to 5 times on port collision)
 	bindIP := "0.0.0.0"
 	if cfg.IPv6 {
 		bindIP = "::"
 	}
-	localAddr := &net.UDPAddr{IP: net.ParseIP(bindIP), Port: rtpPort}
-	conn, err := net.ListenUDP("udp", localAddr)
-	if err != nil {
-		byeCtx, byeCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer byeCancel()
-		_ = inviteResult.Dialog.Bye(byeCtx)
-		sipClient.Close()
-		return nil, fmt.Errorf("dial: bind RTP port %d: %w", rtpPort, err)
+	var conn *net.UDPConn
+	for attempt := 0; attempt < 5; attempt++ {
+		if attempt > 0 {
+			rtpPort = 20000 + rand.Intn(20000)
+		}
+		localAddr := &net.UDPAddr{IP: net.ParseIP(bindIP), Port: rtpPort}
+		var bindErr error
+		conn, bindErr = net.ListenUDP("udp", localAddr)
+		if bindErr == nil {
+			break
+		}
+		if attempt == 4 {
+			byeCtx, byeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer byeCancel()
+			_ = inviteResult.Dialog.Bye(byeCtx)
+			sipClient.Close()
+			return nil, fmt.Errorf("dial: bind RTP port %d: %w", rtpPort, bindErr)
+		}
 	}
 
 	// Use early media remote address if available, fall back to 200 OK
