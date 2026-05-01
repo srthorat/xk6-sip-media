@@ -34,6 +34,9 @@ func (m *SIPModule) StartHealthCheck(opts map[string]interface{}) *K6HealthCheck
 	if v, ok := opts["target"].(string); ok {
 		cfg.Target = v
 	}
+	if cfg.Target == "" {
+		panic("sip.startHealthCheck: 'target' is required")
+	}
 	if v, ok := opts["localIP"].(string); ok {
 		cfg.LocalIP = v
 	}

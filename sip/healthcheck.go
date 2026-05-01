@@ -2,6 +2,7 @@ package sip
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -42,11 +43,12 @@ type HealthCheckStats struct {
 // HealthChecker runs a background SIP OPTIONS ping loop.
 // Create one via StartHealthCheck(); call Stop() to tear it down.
 type HealthChecker struct {
-	cfg    HealthCheckConfig
-	mu     sync.RWMutex
-	stats  HealthCheckStats
-	cancel context.CancelFunc
-	done   chan struct{}
+	cfg       HealthCheckConfig
+	mu        sync.RWMutex
+	stats     HealthCheckStats
+	cancel    context.CancelFunc
+	done      chan struct{}
+	sipClient *Client // reused across all pings to avoid socket churn
 }
 
 // StartHealthCheck launches a background goroutine that sends SIP OPTIONS
@@ -63,11 +65,20 @@ func StartHealthCheck(cfg HealthCheckConfig) *HealthChecker {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+
+	transport := cfg.Transport
+	if transport == "" {
+		transport = TransportUDP
+	}
+	localIP := resolveLocalIPAuto(cfg.LocalIP, false)
+	cl, _ := NewClientWithTransport(localIP, transport, nil) // nil on err → ping() marks failure
+
 	hc := &HealthChecker{
-		cfg:    cfg,
-		cancel: cancel,
-		done:   make(chan struct{}),
-		stats:  HealthCheckStats{Healthy: true},
+		cfg:       cfg,
+		cancel:    cancel,
+		done:      make(chan struct{}),
+		stats:     HealthCheckStats{Healthy: true},
+		sipClient: cl,
 	}
 	go hc.run(ctx)
 	return hc
@@ -77,7 +88,7 @@ func StartHealthCheck(cfg HealthCheckConfig) *HealthChecker {
 func (hc *HealthChecker) run(ctx context.Context) {
 	defer close(hc.done)
 
-	hc.ping() // immediate first check
+	hc.ping(ctx) // immediate first check
 
 	ticker := time.NewTicker(hc.cfg.Interval)
 	defer ticker.Stop()
@@ -87,19 +98,21 @@ func (hc *HealthChecker) run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			hc.ping()
+			hc.ping(ctx)
 		}
 	}
 }
 
-// ping sends one OPTIONS request and updates stats.
-func (hc *HealthChecker) ping() {
-	res, err := SendOptions(OptionsConfig{
-		Target:    hc.cfg.Target,
-		LocalIP:   hc.cfg.LocalIP,
-		Transport: hc.cfg.Transport,
-		Timeout:   hc.cfg.Timeout,
-	})
+// ping sends one OPTIONS request using the shared client and updates stats.
+// ctx is the health-checker's parent context; cancelling it aborts in-flight pings immediately.
+func (hc *HealthChecker) ping(ctx context.Context) {
+	var res *OptionsResult
+	var err error
+	if hc.sipClient != nil {
+		res, err = sendOptionsWithClient(ctx, hc.sipClient, hc.cfg.Target, hc.cfg.Timeout)
+	} else {
+		err = fmt.Errorf("options: no client (creation failed at startup)")
+	}
 
 	hc.mu.Lock()
 	defer hc.mu.Unlock()
@@ -140,8 +153,11 @@ func (hc *HealthChecker) Stats() HealthCheckStats {
 	return hc.stats
 }
 
-// Stop cancels the background loop and waits for it to exit.
+// Stop cancels the background loop, waits for it to exit, then closes the shared client.
 func (hc *HealthChecker) Stop() {
 	hc.cancel()
 	<-hc.done
+	if hc.sipClient != nil {
+		hc.sipClient.Close()
+	}
 }

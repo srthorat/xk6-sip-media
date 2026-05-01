@@ -419,7 +419,7 @@ Load a CSV file of SIP credentials and distribute them across VUs. Each row beco
 const pool = sip.loadCSV('examples/csv/users.csv');
 
 export default function () {
-  // Sequential: VU 1 → row 1, VU 2 → row 2, wraps on overflow
+  // Sequential: VU 1 → the first data row, VU 2 → the second data row, then wraps after the last row
   const creds = pool.pick(__VU);
 
   // Or: always advance a shared counter (round-robin across all VUs)

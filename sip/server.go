@@ -270,6 +270,6 @@ func (s *Server) handleInvite(req *sipmsg.Request, tx sipmsg.ServerTransaction) 
 // handleOptions responds to SIP OPTIONS keep-alives (ping) per RFC 3261 §11.2.
 func handleOptions(req *sipmsg.Request, tx sipmsg.ServerTransaction) {
 	resp := sipmsg.NewResponseFromRequest(req, 200, "OK", nil)
-	resp.AppendHeader(sipmsg.NewHeader("Allow", "INVITE, ACK, BYE, CANCEL, OPTIONS, INFO, REFER, MESSAGE"))
+	resp.AppendHeader(sipmsg.NewHeader("Allow", "INVITE, ACK, BYE, CANCEL, OPTIONS, INFO"))
 	_ = tx.Respond(resp)
 }

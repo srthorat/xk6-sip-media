@@ -6,7 +6,9 @@ import (
 	"math/rand"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // ── CredentialPool ────────────────────────────────────────────────────────────
@@ -31,6 +33,8 @@ type K6CredentialPool struct {
 	rows    []csvRow
 	mode    string // "sequential" | "random"
 	counter atomic.Int64
+	rng     *rand.Rand // per-pool, seeded at load time
+	rngMu   sync.Mutex // guards rng
 }
 
 // loadCSVFile parses a CSV file and returns a K6CredentialPool.
@@ -42,7 +46,10 @@ func loadCSVFile(path string, opts map[string]interface{}) (*K6CredentialPool, e
 	}
 	defer f.Close()
 
-	pool := &K6CredentialPool{mode: "sequential"}
+	pool := &K6CredentialPool{
+		mode: "sequential",
+		rng:  rand.New(rand.NewSource(time.Now().UnixNano())), //nolint:gosec // not cryptographic
+	}
 
 	// Allow JS caller to force mode
 	if v, ok := opts["mode"].(string); ok {
@@ -55,6 +62,7 @@ func loadCSVFile(path string, opts map[string]interface{}) (*K6CredentialPool, e
 	}
 
 	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20) // allow lines up to 1 MiB
 	var lines []string
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -148,7 +156,9 @@ func (p *K6CredentialPool) Pick(vuID int64) map[string]interface{} {
 	}
 	var idx int
 	if p.mode == "random" {
-		idx = rand.Intn(len(p.rows)) //nolint:gosec // not cryptographic
+		p.rngMu.Lock()
+		idx = p.rng.Intn(len(p.rows))
+		p.rngMu.Unlock()
 	} else {
 		// Sequential: distribute VUs across rows; wrap around if VUs > rows.
 		// Uses (vuId-1) so VU 1 → row[0], VU 2 → row[1], etc.
@@ -176,7 +186,10 @@ func (p *K6CredentialPool) PickRandom() map[string]interface{} {
 	if len(p.rows) == 0 {
 		return nil
 	}
-	return rowToJS(p.rows[rand.Intn(len(p.rows))]) //nolint:gosec
+	p.rngMu.Lock()
+	idx := p.rng.Intn(len(p.rows))
+	p.rngMu.Unlock()
+	return rowToJS(p.rows[idx])
 }
 
 // Len returns the number of rows in the pool.
