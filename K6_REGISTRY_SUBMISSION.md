@@ -1,46 +1,109 @@
-# k6-docs Extension Registry Submission
+# k6 Extension Registry Submission
 
-To get your extension officially listed on `https://k6.io/docs/extensions/`, you need to fork the `grafana/k6-docs` repository and submit a Pull Request.
+Extensions are listed via **`grafana/k6-extension-registry`** (not `grafana/k6-docs`).
+The registry drives the auto-generated extension catalogue at https://registry.k6.io and the
+Grafana docs page at https://grafana.com/docs/k6/latest/extensions/explore.
 
-## 1. Where to add your entry
-In the `grafana/k6-docs` repository, locate the JSON file that lists extensions. This is typically located at:
-`src/data/markdown/docs/01_extensions/02_explore/extensions.json`
-*(Note: file paths in their repo change occasionally, so look for the JSON array of extensions).*
+---
 
-## 2. What to insert
-Add the following JSON block into the `extensions.json` array (maintaining alphabetical order):
+## 1. Pre-flight checklist
 
-```json
-{
-  "name": "xk6-sip-media",
-  "description": "High-performance SIP and RTP media engine for VoIP load testing. Features sharded CPU-parallel reactors (up to 100k concurrent streams), Opus/G.722/G.711 native codecs, dynamic WebRTC-style SDP payload negotiation, and adaptive jitter buffers with Packet Loss Concealment (PLC).",
-  "author": {
-    "name": "Sakharam Thorat",
-    "url": "https://github.com/srthorat"
-  },
-  "url": "https://github.com/srthorat/xk6-sip-media",
-  "tier": "community",
-  "categories": ["Protocol", "Audio", "VoIP", "SIP"]
-}
+Before opening the PR, verify:
+
+- [x] Repository is public: https://github.com/srthorat/xk6-sip-media
+- [x] Go module path is the full GitHub URL: `github.com/srthorat/xk6-sip-media`
+- [x] At least one tagged release exists (e.g. `v0.1.0`) — the registry auto-detects versions via GitHub API
+- [x] README has build instructions and usage examples
+- [x] Tested against the latest k6 version (v1.7.1)
+- [x] CGO requirement documented (`cgo: true` in registry entry)
+
+---
+
+## 2. Fork and add your entry
+
+```bash
+# 1. Fork grafana/k6-extension-registry on GitHub, then clone your fork
+git clone https://github.com/<your-fork>/k6-extension-registry.git
+cd k6-extension-registry
+
+# 2. Add the entry to the END of registry.yaml
 ```
 
-## 3. Pull Request Template
-When you open the Pull Request on GitHub against `grafana/k6-docs`, copy and paste this into the PR description to get it merged quickly:
+Append this block to `registry.yaml`:
 
+```yaml
+- module: github.com/srthorat/xk6-sip-media
+  description: >-
+    High-performance SIP + RTP media engine for VoIP load testing.
+    Sharded CPU-parallel reactor (up to 100k concurrent streams),
+    Opus/G.722/G.711 codecs, SRTP, adaptive jitter buffer with PLC,
+    E-model MOS scoring, CSV credential pool, and SIP OPTIONS health-check loop.
+  imports:
+    - k6/x/sip
+  cgo: true
+  tier: community
+```
+
+---
+
+## 3. Open the Pull Request
+
+Target: `grafana/k6-extension-registry` → `main`
+
+**PR title:**
+```
+Register xk6-sip-media — SIP/RTP VoIP load testing extension
+```
+
+**PR body:**
 ```markdown
-### Description
-Adding `xk6-sip-media` to the community extension registry. 
+## Extension
 
-This extension provides production-grade SIP + RTP load testing natively in JavaScript. It replaces the need for legacy tools like SIPp by bringing multi-leg conferences, attended transfers, PESQ/E-Model MOS scoring, and SRTP directly into k6. 
+**Module:** `github.com/srthorat/xk6-sip-media`
+**Repository:** https://github.com/srthorat/xk6-sip-media
+**Tier:** community
 
-**Key Technical Details:**
-* **Scale:** Uses a custom CPU-sharded Go Reactor (nginx-style) bypassing the standard "1-goroutine-per-call" limit to push upwards of 100,000 concurrent UDP streams.
-* **Codecs:** Implements native `tree-sitter` parsed Opt-in G.729 (GPL tag isolated), Opus 48kHz, G.722, and PCMU/A. 
-* **Quality:** Built-in adaptive Jitter Buffer with Packet Loss Concealment.
+## Description
 
-### Checklist
-- [x] Extension repository is public
-- [x] Repository has a clear README with usage examples
-- [x] Tested with the latest k6 version
-- [x] JSON format in `extensions.json` is valid and matches the schema
+Production-grade SIP + RTP load testing natively in k6 JavaScript.
+
+Key features:
+- CPU-sharded Go Reactor (nginx-style) — scales beyond "1 goroutine per call"
+- Opus 48kHz (CGO), G.722, G.711 µ-law/A-law codecs
+- SRTP encrypted media (AES-128-CM)
+- Adaptive jitter buffer with Packet Loss Concealment
+- E-model MOS scoring and RTCP statistics
+- `sip.loadCSV()` — SIPp-compatible credential pool (sequential / round-robin / random)
+- `sip.startHealthCheck()` — background SIP OPTIONS ping loop
+
+## Checklist
+
+- [x] Module path matches the GitHub repository URL
+- [x] `cgo: true` set (Opus codec requires CGO)
+- [x] README has build and usage instructions
+- [x] Tested with k6 v1.7.1
+- [x] Repository is public
 ```
+
+---
+
+## 4. After merge
+
+Once the PR is merged:
+1. The registry at https://registry.k6.io updates automatically.
+2. A workflow dispatch in `grafana/k6-docs` regenerates the community extensions page.
+3. The extension appears at https://grafana.com/docs/k6/latest/extensions/explore/.
+
+---
+
+## 5. Tag a release first
+
+The registry auto-detects versions via the GitHub API. Create a release tag before or shortly after the PR merges:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Then create a GitHub Release from that tag so the registry picks up a stable version.
+
