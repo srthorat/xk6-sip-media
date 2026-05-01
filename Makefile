@@ -7,7 +7,7 @@ build:
 	@echo "Installing xk6..."
 	@go install go.k6.io/xk6/cmd/xk6@latest
 	@echo "Building custom k6 binary with xk6-sip-media extension..."
-	@$(XK6_BIN) build --cgo --with xk6-sip-media=.
+	@$(XK6_BIN) build --cgo --with github.com/srthorat/xk6-sip-media=.
 
 run: build
 	@echo "Running root script.js..."
