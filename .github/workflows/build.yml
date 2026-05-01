@@ -70,3 +70,15 @@ jobs:
           CGO_ENABLED: "1"
           GOFLAGS: "-tags=g729"
         run: xk6 build --cgo --with github.com/srthorat/xk6-sip-media=.
+
+      - name: Security scan (gosec)
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          # Excluded rules — all confirmed false positives for a load-testing tool:
+          #   G104: unhandled Close() in cleanup/error paths — intentional fire-and-forget
+          #   G115: integer overflow in RTP/codec byte packing — values bounded by protocol
+          #   G304: user-supplied audio/CSV paths — by design in a load-testing tool
+          #   G404: math/rand for non-cryptographic port/tag selection — no security req.
+          #   G706: log injection via slog — messages are not user-controlled at runtime
+          #   G505: crypto/sha1 in SRTP — mandated by RFC 3711, no alternative
+          gosec -exclude=G104,G115,G304,G404,G706,G505 -exclude-dir=scratch ./...

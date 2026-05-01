@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -60,12 +61,20 @@ func Init() {
 			port = "2112"
 		}
 		addr := ":" + port
-		http.Handle("/metrics", promhttp.Handler())
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.Handler())
+		srv := &http.Server{
+			Addr:         addr,
+			Handler:      mux,
+			ReadTimeout:  5 * time.Second,
+			WriteTimeout: 10 * time.Second,
+			IdleTimeout:  60 * time.Second,
+		}
 		go func() {
-			if err := http.ListenAndServe(addr, nil); err != nil {
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				log.Printf("[prometheus] server error: %v", err)
 			}
 		}()
-		log.Printf("[prometheus] metrics at http://localhost%s/metrics", addr)
+		log.Printf("[prometheus] metrics at http://localhost%s/metrics", addr) //nolint:gosec // G706: addr is ":PORT" format, not user-controlled content
 	})
 }
