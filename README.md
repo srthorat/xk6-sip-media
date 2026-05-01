@@ -119,7 +119,7 @@ cd xk6-sip-media
 
 # Build the custom k6 binary (installs xk6 automatically)
 make build
-# Equivalent to: xk6 build --cgo --with xk6-sip-media=.
+# Equivalent to: xk6 build --cgo --with github.com/srthorat/xk6-sip-media=.
 
 # Run unit tests
 make test
@@ -137,14 +137,14 @@ go install go.k6.io/xk6/cmd/xk6@latest
 # 2. Build the custom k6 binary
 #    --cgo is REQUIRED: the Opus codec uses CGO
 cd xk6-sip-media
-xk6 build --cgo --with xk6-sip-media=.
+xk6 build --cgo --with github.com/srthorat/xk6-sip-media=.
 
 # 3. Verify the build
 ./k6 version
 # Expected output:
 #   k6 v1.7.1 (go1.25.x, darwin/arm64)
 #   Extensions:
-#     xk6-sip-media (devel), k6/x/sip [js]
+#     github.com/srthorat/xk6-sip-media (devel), k6/x/sip [js]
 
 # 4. Run unit tests (all packages)
 CGO_ENABLED=1 CGO_LDFLAGS="-Wl,-w" go test -race -count=1 ./...
