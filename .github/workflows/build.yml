@@ -1,8 +1,7 @@
 name: build
 
 on:
-  push:
-    branches: [ "main" ]
+  push: # validate every branch on push
   pull_request:
     branches: [ "main" ]
 
@@ -51,17 +50,23 @@ jobs:
             exit 1
           fi
 
+      - name: Vet
+        run: CGO_ENABLED=1 go vet ./...
+
       - name: Verify dependencies
         run: go mod verify
 
-      - name: Run Unit Tests
+      - name: Unit tests
         run: CGO_ENABLED=1 go test -v -race ./...
 
-      - name: Build default k6 binary (no G729)
-        run: CGO_ENABLED=1 xk6 build --cgo --with xk6-sip-media=.
+      - name: Binary build (go build)
+        run: CGO_ENABLED=1 go build ./...
 
-      - name: Build k6 binary with G729 (GPL opt-in)
+      - name: k6 extension build — default (no G729)
+        run: CGO_ENABLED=1 xk6 build --cgo --with github.com/srthorat/xk6-sip-media=.
+
+      - name: k6 extension build — with G729 (GPL opt-in)
         env:
           CGO_ENABLED: "1"
           GOFLAGS: "-tags=g729"
-        run: xk6 build --cgo --with xk6-sip-media=.
+        run: xk6 build --cgo --with github.com/srthorat/xk6-sip-media=.

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	sipcall "xk6-sip-media/sip"
+	sipcall "github.com/srthorat/xk6-sip-media/sip"
 )
 
 func TestParseSDP_Standard(t *testing.T) {

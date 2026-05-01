@@ -146,9 +146,13 @@ func buildInviteRequest(
 	}
 	req.AppendHeader(&contact)
 
-	appendHeaderIfMissing(req, "Allow", "PRACK, INVITE, ACK, BYE, CANCEL, UPDATE, INFO, SUBSCRIBE, NOTIFY, REFER, MESSAGE, OPTIONS")
-	appendHeaderIfMissing(req, "Supported", "replaces, 100rel, norefersub")
-	appendHeaderIfMissing(req, "User-Agent", "xk6-sip-media/1.0")
+	appendHeaderIfMissing(req, "Allow", "INVITE, ACK, BYE, CANCEL, OPTIONS, INFO, REFER, MESSAGE")
+	// 100rel removed: PRACK is not implemented; advertising it would cause
+	// failure if the remote sends Require: 100rel (RFC 3262 §3).
+	// replaces: supported via attended transfer (RFC 3891).
+	// norefersub: we do not subscribe to REFER NOTIFYs (RFC 4488).
+	appendHeaderIfMissing(req, "Supported", "replaces, norefersub")
+	appendHeaderIfMissing(req, "User-Agent", "github.com/srthorat/xk6-sip-media/1.0")
 
 	for _, hdr := range extraHeaders {
 		req.AppendHeader(hdr)

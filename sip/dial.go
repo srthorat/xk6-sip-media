@@ -11,9 +11,9 @@ import (
 
 	sipmsg "github.com/emiago/sipgo/sip"
 
-	"xk6-sip-media/core/audio"
-	"xk6-sip-media/core/codec"
-	corertp "xk6-sip-media/core/rtp"
+	"github.com/srthorat/xk6-sip-media/core/audio"
+	"github.com/srthorat/xk6-sip-media/core/codec"
+	corertp "github.com/srthorat/xk6-sip-media/core/rtp"
 )
 
 // Dial establishes a SIP call and returns a live *CallHandle immediately
@@ -93,6 +93,31 @@ func Dial(cfg CallConfig) (*CallHandle, error) {
 	sipClient, err := NewClientWithTransport(localIP, transport, cfg.TLSConfig)
 	if err != nil {
 		return nil, fmt.Errorf("dial: SIP client (%s): %w", transport, err)
+	}
+
+	// 5.5. Bind local UDP RTP socket BEFORE building the SDP offer so the
+	//      advertised port matches the socket the OS actually binds.
+	//      Retry up to 5 times on port collision; update rtpPort on success.
+	bindIP := "0.0.0.0"
+	if cfg.IPv6 {
+		bindIP = "::"
+	}
+	var conn *net.UDPConn
+	for attempt := 0; attempt < 5; attempt++ {
+		if attempt > 0 {
+			rtpPort = 20000 + rand.Intn(20000)
+		}
+		localAddr := &net.UDPAddr{IP: net.ParseIP(bindIP), Port: rtpPort}
+		var bindErr error
+		conn, bindErr = net.ListenUDP("udp", localAddr)
+		if bindErr == nil {
+			rtpPort = conn.LocalAddr().(*net.UDPAddr).Port // use the OS-assigned port
+			break
+		}
+		if attempt == 4 {
+			sipClient.Close()
+			return nil, fmt.Errorf("dial: bind RTP port: %w", bindErr)
+		}
 	}
 
 	// 6. Build SDP offer (plain or SRTP)
@@ -209,20 +234,7 @@ func Dial(cfg CallConfig) (*CallHandle, error) {
 		}
 	}
 
-	// 11. Bind local UDP RTP socket
-	bindIP := "0.0.0.0"
-	if cfg.IPv6 {
-		bindIP = "::"
-	}
-	localAddr := &net.UDPAddr{IP: net.ParseIP(bindIP), Port: rtpPort}
-	conn, err := net.ListenUDP("udp", localAddr)
-	if err != nil {
-		byeCtx, byeCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer byeCancel()
-		_ = inviteResult.Dialog.Bye(byeCtx)
-		sipClient.Close()
-		return nil, fmt.Errorf("dial: bind RTP port %d: %w", rtpPort, err)
-	}
+	// 11. (RTP socket was bound in step 5.5 before SDP was built.)
 
 	// Use early media remote address if available, fall back to 200 OK
 	remoteIP := inviteResult.RemoteIP

@@ -3,7 +3,7 @@ package codec_test
 import (
 	"testing"
 
-	"xk6-sip-media/core/codec"
+	"github.com/srthorat/xk6-sip-media/core/codec"
 )
 
 // generateSine produces a simple alternating tone pattern (not real sine, but non-silent PCM).

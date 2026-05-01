@@ -1,4 +1,4 @@
-module xk6-sip-media
+module github.com/srthorat/xk6-sip-media
 
 go 1.25.0
 

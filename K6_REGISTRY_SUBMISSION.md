@@ -15,10 +15,10 @@ Add the following JSON block into the `extensions.json` array (maintaining alpha
   "name": "xk6-sip-media",
   "description": "High-performance SIP and RTP media engine for VoIP load testing. Features sharded CPU-parallel reactors (up to 100k concurrent streams), Opus/G.722/G.711 native codecs, dynamic WebRTC-style SDP payload negotiation, and adaptive jitter buffers with Packet Loss Concealment (PLC).",
   "author": {
-    "name": "Your Name/Organization",
-    "url": "https://github.com/your-username"
+    "name": "Sakharam Thorat",
+    "url": "https://github.com/srthorat"
   },
-  "url": "https://github.com/your-username/xk6-sip-media",
+  "url": "https://github.com/srthorat/xk6-sip-media",
   "tier": "community",
   "categories": ["Protocol", "Audio", "VoIP", "SIP"]
 }

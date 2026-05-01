@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	corertp "xk6-sip-media/core/rtp"
+	corertp "github.com/srthorat/xk6-sip-media/core/rtp"
 )
 
 // ConferenceConfig describes a bridge-based SIP conference.

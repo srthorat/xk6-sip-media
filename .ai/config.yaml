@@ -11,7 +11,7 @@ build_command: CGO_ENABLED=1 go build ./...
 test_command: CGO_ENABLED=1 CGO_LDFLAGS="-Wl,-w" go test -v -race ./...
 
 # Scenario numbering
-next_scenario_number: 33
+next_scenario_number: 35
 scenario_dir: examples/k6/scenarios
 
 # Codecs

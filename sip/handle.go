@@ -6,14 +6,15 @@ import (
 	"net"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/emiago/sipgo"
 	sipmsg "github.com/emiago/sipgo/sip"
 
-	"xk6-sip-media/core/audio"
-	"xk6-sip-media/core/codec"
-	corertp "xk6-sip-media/core/rtp"
+	"github.com/srthorat/xk6-sip-media/core/audio"
+	"github.com/srthorat/xk6-sip-media/core/codec"
+	corertp "github.com/srthorat/xk6-sip-media/core/rtp"
 )
 
 // CallHandle represents a live, established SIP call (post-ACK).
@@ -52,6 +53,7 @@ type CallHandle struct {
 	active bool // false after Hangup() or remote BYE
 	onHold bool
 	result corertp.CallResult
+	sdpVer atomic.Uint64 // RFC 4566 §5.2: session-version increments on each re-INVITE
 }
 
 // IsActive returns true if the call is still connected.

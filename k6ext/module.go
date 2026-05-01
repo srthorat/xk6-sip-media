@@ -4,12 +4,21 @@ package k6ext
 
 import (
 	"fmt"
+	"log/slog"
+	"os"
 	"sync"
 
 	"go.k6.io/k6/js/modules"
 )
 
 func init() {
+	// Suppress WARN-level noise from sipgo's transport layer (e.g.
+	// "UDP ref went negative"). Gate behind XK6_SIP_VERBOSE=1 to opt out.
+	if os.Getenv("XK6_SIP_VERBOSE") != "1" {
+		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr,
+			&slog.HandlerOptions{Level: slog.LevelError})))
+	}
+
 	modules.Register("k6/x/sip", new(RootModule))
 }
 

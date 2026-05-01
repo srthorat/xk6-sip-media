@@ -23,7 +23,41 @@ type OptionsResult struct {
 	RTT        time.Duration
 }
 
-// SendOptions sends a SIP OPTIONS ping to the target URI to measure round-trip time
+// sendOptionsWithClient sends a SIP OPTIONS using an already-open *Client.
+// pingCtx should be derived from a cancellable parent so Stop() aborts promptly.
+func sendOptionsWithClient(pingCtx context.Context, c *Client, target string, timeout time.Duration) (*OptionsResult, error) {
+	ctx, cancel := context.WithTimeout(pingCtx, timeout)
+	defer cancel()
+
+	var toURI sipmsg.Uri
+	if e := sipmsg.ParseUri(target, &toURI); e != nil {
+		return nil, fmt.Errorf("options: parse target: %w", e)
+	}
+
+	req := sipmsg.NewRequest(sipmsg.OPTIONS, toURI)
+	req.AppendHeader(sipmsg.NewHeader("Content-Length", "0"))
+	req.AppendHeader(sipmsg.NewHeader("Accept", "application/sdp"))
+
+	start := time.Now()
+	tx, e := c.client.TransactionRequest(ctx, req)
+	if e != nil {
+		return nil, fmt.Errorf("options: send request: %w", e)
+	}
+
+	select {
+	case resp := <-tx.Responses():
+		if resp == nil {
+			return nil, fmt.Errorf("options: nil response")
+		}
+		return &OptionsResult{
+			StatusCode: int(resp.StatusCode),
+			RTT:        time.Since(start),
+		}, nil
+	case <-ctx.Done():
+		return nil, fmt.Errorf("options: timeout or cancelled: %w", ctx.Err())
+	}
+}
+
 // and verify SBC/PBX health without establishing an active call.
 func SendOptions(cfg OptionsConfig) (*OptionsResult, error) {
 	if cfg.Timeout == 0 {

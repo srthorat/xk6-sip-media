@@ -17,6 +17,9 @@ import { check } from 'k6';
 
 const TARGET     = __ENV.SIP_TARGET    || 'sip:ivr@192.168.1.100';
 const AUDIO_FILE = __ENV.SIP_AUDIO    || './examples/audio/sample.wav';
+const USERNAME   = __ENV.SIP_USERNAME  || '';
+const PASSWORD   = __ENV.SIP_PASSWORD  || '';
+const AOR        = __ENV.SIP_AOR       || '';
 
 export const options = {
   scenarios: {
@@ -52,6 +55,9 @@ export default function () {
     duration: '10s',
     audio:    { file: AUDIO_FILE },
     localIP:  '0.0.0.0',
+    ...(USERNAME && { username: USERNAME }),
+    ...(PASSWORD && { password: PASSWORD }),
+    ...(AOR      && { aor: AOR }),
   });
 
   check(result, {

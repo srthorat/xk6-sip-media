@@ -1,7 +1,7 @@
 package k6ext
 
 import (
-	sipcall "xk6-sip-media/sip"
+	sipcall "github.com/srthorat/xk6-sip-media/sip"
 )
 
 // K6Conference wraps a *sip.Conference for the k6 JavaScript runtime.

@@ -1,5 +1,5 @@
 package sipmedia
 
 import (
-	_ "xk6-sip-media/k6ext"
+	_ "github.com/srthorat/xk6-sip-media/k6ext"
 )

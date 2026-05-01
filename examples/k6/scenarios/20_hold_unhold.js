@@ -16,8 +16,11 @@ import sip from 'k6/x/sip';
 import { check, sleep } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
 
-const TARGET = __ENV.SIP_TARGET || 'sip:agent@192.168.1.100';
-const AUDIO  = __ENV.SIP_AUDIO  || './examples/audio/sample.wav';
+const TARGET    = __ENV.SIP_TARGET    || 'sip:agent@192.168.1.100';
+const AUDIO     = __ENV.SIP_AUDIO     || './examples/audio/sample.wav';
+const USERNAME  = __ENV.SIP_USERNAME  || '';
+const PASSWORD  = __ENV.SIP_PASSWORD  || '';
+const AOR       = __ENV.SIP_AOR       || '';
 
 const holdSuccess   = new Counter('hold_success');
 const unholdSuccess = new Counter('unhold_success');
@@ -32,10 +35,11 @@ export const options = {
     },
   },
   thresholds: {
-    hold_success:    ['count>0'],
-    unhold_success:  ['count>0'],
+    hold_success:     ['count>0'],
+    unhold_success:   ['count>0'],
     sip_call_failure: ['rate<0.02'],
-    mos_score:        ['avg>=3.0'],
+    // mos_score not tracked here — sip.dial() does not auto-emit MOS metrics;
+    // use sip.call() or call.result() if MOS is required.
   },
 };
 
@@ -44,6 +48,9 @@ export default function () {
     target:   TARGET,
     audio:    { file: AUDIO },
     duration: '60s',
+    ...(USERNAME && { username: USERNAME }),
+    ...(PASSWORD && { password: PASSWORD }),
+    ...(AOR      && { aor: AOR }),
   });
 
   if (!call) return;

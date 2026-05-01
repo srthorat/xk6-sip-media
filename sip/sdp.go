@@ -21,11 +21,17 @@ const (
 //   - rtpPort:  local UDP port for RTP (m= line)
 //   - payloadType: e.g. 0 for PCMU, 8 for PCMA
 func BuildSDP(localIP string, rtpPort int, payloadType uint8) string {
-	return BuildSDPWithDirection(localIP, rtpPort, payloadType, DirSendRecv)
+	return buildSDP(localIP, rtpPort, payloadType, DirSendRecv, 0)
 }
 
 // BuildSDPWithDirection constructs a minimal SDP offer body with a specific direction.
 func BuildSDPWithDirection(localIP string, rtpPort int, payloadType uint8, direction string) string {
+	return buildSDP(localIP, rtpPort, payloadType, direction, 0)
+}
+
+// buildSDP is the internal builder; sessVer is the RFC 4566 §5.2 session-version
+// (0 for initial offer; callers increment it on each re-INVITE).
+func buildSDP(localIP string, rtpPort int, payloadType uint8, direction string, sessVer uint64) string {
 	codecName := "PCMU"
 	clockRate := 8000
 	switch payloadType {
@@ -36,23 +42,32 @@ func BuildSDPWithDirection(localIP string, rtpPort int, payloadType uint8, direc
 	case 18:
 		codecName = "G729"
 	case 111:
-		codecName = "OPUS"
+		// RFC 7587 §5: encoding name MUST be 'opus' (lowercase),
+		// encoding parameters (channels) MUST be 2.
+		codecName = "opus"
 		clockRate = 48000
+	}
+
+	// RFC 7587 §5: Opus a=rtpmap MUST include channel count (/2).
+	// All other codecs are mono (no channel parameter required by RFC 3551).
+	rtpmap := fmt.Sprintf("%d %s/%d", payloadType, codecName, clockRate)
+	if payloadType == 111 {
+		rtpmap = fmt.Sprintf("%d %s/%d/2", payloadType, codecName, clockRate)
 	}
 
 	return fmt.Sprintf(
 		"v=0\r\n"+
-			"o=k6load 0 0 IN IP4 %s\r\n"+
+			"o=k6load 0 %d IN IP4 %s\r\n"+
 			"s=xk6-sip-media load test\r\n"+
 			"c=IN IP4 %s\r\n"+
 			"t=0 0\r\n"+
 			"m=audio %d RTP/AVP %d\r\n"+
-			"a=rtpmap:%d %s/%d\r\n"+
+			"a=rtpmap:%s\r\n"+
 			"a=ptime:20\r\n"+
 			"a=%s\r\n",
-		localIP, localIP,
+		sessVer, localIP, localIP,
 		rtpPort, payloadType,
-		payloadType, codecName, clockRate,
+		rtpmap,
 		direction,
 	)
 }

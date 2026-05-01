@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	corertp "xk6-sip-media/core/rtp"
+	corertp "github.com/srthorat/xk6-sip-media/core/rtp"
 )
 
 // SRTP cipher suites supported in SDP a=crypto (RFC 4568).
