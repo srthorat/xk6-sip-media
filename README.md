@@ -42,7 +42,7 @@ export default function () {
 | REGISTER + Digest Auth (401) | ✅ | Auto-retry on 401 challenge |
 | Hold / Unhold (re-INVITE) | ✅ | `a=inactive` / `a=sendrecv` |
 | Blind Transfer (REFER) | ✅ | RFC 3515 |
-| Attended Transfer (REFER+Replaces) | ✅ | RFC 3891 — **SIPp cannot do this** |
+| Attended Transfer (REFER+Replaces) | ✅ | RFC 3891 |
 | Conference (bridge model) | ✅ | Multi-leg, aggregated metrics |
 | 3PCC — Third Party Call Control | ✅ | RFC 3725 |
 | SIP INFO (DTMF relay) | ✅ | `application/dtmf-relay` (Cisco/Avaya) |
