@@ -848,7 +848,8 @@ k6 cloud examples/k6/scenarios/05_soak.js
 | 30 | OPTIONS Ping | High frequency connectionless SIP heartbeat checks |
 | 33 | Multi-User CSV | Concurrent calls from CSV credential pool |
 | 34 | CSV Ramp | Ramping VUs with CSV credentials |
-| 35 | Registered UAS | Register → wait for inbound call → answer → play → BYE |
+| 35 | CANCEL Load | CANCEL storm — flood INVITE then immediately CANCEL |
+| 36 | Registered UAS | Register → wait for inbound call → answer → play → BYE |
 
 ### Base examples (non-numbered)
 | File | Description |
@@ -958,7 +959,7 @@ xk6-sip-media/
         ├── uas_load.js           # 100-VU UAS load test (register + answer inbound)
         ├── uac_load.js           # 100-VU UAC load test (register + call UAS endpoints)
         ├── ivr_flow.js           # IVR + AI validation
-        └── scenarios/            # 30 load scenarios (01–35)
+        └── scenarios/            # 31 load scenarios (01–36)
 ```
 
 ---

@@ -1,5 +1,5 @@
 /**
- * Scenario 35 — Registered UAS: Register → Wait for Call → Answer → Play → BYE
+ * Scenario 36 — Registered UAS: Register → Wait for Call → Answer → Play → BYE
  * ==============================================================================
  * Simulates a SIP endpoint (phone/softphone) that:
  *   1. Registers its AOR with a SIP proxy/PBX (Digest Auth)

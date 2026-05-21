@@ -162,18 +162,32 @@ func NewRegisteredUAS(cfg RegisteredUASConfig) (*RegisteredUAS, error) {
 	srv.OnBye(r.handleBye)
 	srv.OnOptions(handleOptions)
 
-	// Start listening (Rule #4: wg.Add before goroutine — no wg here,
-	// but the goroutine writes no shared state after ctx cancel).
+	// Start listening and capture early bind errors.
+	listenErrCh := make(chan error, 1)
 	go func() {
 		transport := cfg.Transport
 		if transport == "" {
 			transport = TransportUDP
 		}
-		_ = srv.ListenAndServe(ctx, transport, cfg.ListenAddr)
+		if err := srv.ListenAndServe(ctx, transport, cfg.ListenAddr); err != nil && ctx.Err() == nil {
+			listenErrCh <- err
+		}
+		close(listenErrCh)
 	}()
 
 	// Allow transport to bind before sending REGISTER.
 	time.Sleep(150 * time.Millisecond)
+
+	// Fail early if the transport failed to bind (e.g. address already in use).
+	select {
+	case err := <-listenErrCh:
+		if err != nil {
+			cancel()
+			_ = ua.Close()
+			return nil, fmt.Errorf("reguas: listen on %s: %w", cfg.ListenAddr, err)
+		}
+	default:
+	}
 
 	// ── Register ──────────────────────────────────────────────────────────
 	if err := r.sendRegister(cfg.Expires); err != nil {
@@ -296,11 +310,20 @@ func (r *RegisteredUAS) sendRegister(expires int) error {
 }
 
 // autoRefresh re-registers at Expires/2 intervals until ctx is done.
+// The interval is clamped so it never exceeds the registration lifetime.
 func (r *RegisteredUAS) autoRefresh() {
-	interval := time.Duration(r.cfg.Expires/2) * time.Second
-	if interval < 30*time.Second {
-		interval = 30 * time.Second
+	halfSec := r.cfg.Expires / 2
+	if halfSec < 5 {
+		halfSec = 5
 	}
+	capSec := r.cfg.Expires - 5
+	if capSec < 1 {
+		capSec = 1
+	}
+	if halfSec > capSec {
+		halfSec = capSec
+	}
+	interval := time.Duration(halfSec) * time.Second
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -361,24 +384,44 @@ func (r *RegisteredUAS) handleInvite(req *sipmsg.Request, tx sipmsg.ServerTransa
 		return
 	}
 
-	// Allocate a local RTP port
-	rtpPort := 20000 + rand.Intn(20000)
-
 	_ = tx.Respond(sipmsg.NewResponseFromRequest(req, 100, "Trying", nil))
+
+	// Bind the RTP socket first (port 0 → OS picks an available port).
+	// We must know the actual port before building the SDP answer.
+	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: 0})
+	if err != nil {
+		_ = tx.Respond(sipmsg.NewResponseFromRequest(req, 500, "RTP Bind Failed", nil))
+		return
+	}
+	defer conn.Close()
+	rtpPort := conn.LocalAddr().(*net.UDPAddr).Port
 
 	sdpAnswer := BuildSDP(r.cfg.LocalIP, rtpPort, cod.PayloadType())
 	resp200 := sipmsg.NewResponseFromRequest(req, 200, "OK", []byte(sdpAnswer))
 	resp200.AppendHeader(sipmsg.NewHeader("Content-Type", "application/sdp"))
+	// Derive contact user consistently: username if set, else AOR user.
+	var aorForContact sipmsg.Uri
+	_ = sipmsg.ParseUri(r.cfg.AOR, &aorForContact)
+	contactUser200 := r.cfg.Username
+	if contactUser200 == "" {
+		contactUser200 = aorForContact.User
+	}
 	resp200.AppendHeader(&sipmsg.ContactHeader{
 		Address: sipmsg.Uri{
-			User: r.cfg.Username,
+			User: contactUser200,
 			Host: r.cfg.LocalIP,
 			Port: listenPortFromAddr(r.cfg.ListenAddr),
 		},
 	})
+	// Reject malformed requests with no Call-ID to prevent empty-key collisions.
+	callID := callIDValue(req)
+	if callID == "" {
+		_ = tx.Respond(sipmsg.NewResponseFromRequest(req, 400, "Missing Call-ID", nil))
+		return
+	}
+
 	// Register stop signal BEFORE sending 200 OK so a BYE that races in
 	// immediately after ACK is never missed.
-	callID := callIDValue(req)
 	cs := newCallStop()
 	r.mu.Lock()
 	r.stopMap[callID] = cs
@@ -392,13 +435,6 @@ func (r *RegisteredUAS) handleInvite(req *sipmsg.Request, tx sipmsg.ServerTransa
 	if err := tx.Respond(resp200); err != nil {
 		return
 	}
-
-	// Bind RTP socket
-	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: rtpPort})
-	if err != nil {
-		return
-	}
-	defer conn.Close()
 
 	remoteAddr := &net.UDPAddr{IP: net.ParseIP(remoteIP), Port: remotePort}
 

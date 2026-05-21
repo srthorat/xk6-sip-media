@@ -13,7 +13,7 @@ import { check, sleep } from 'k6';
  *   6. Unregisters cleanly when the test ends
  *
  * Build first:
- *   xk6 build --with xk6-sip-media=.
+ *   xk6 build --cgo --with github.com/srthorat/xk6-sip-media=.
  *
  * ── Smoke test (single registration, wait 30 s) ──────────────────────────
  *   SIP_REGISTRAR="sip:pbx.example.com" \
@@ -82,9 +82,10 @@ export const options = SMOKE
   : {
       scenarios: {
         registered_uas: {
-          executor:  'constant-vus',
-          vus:       50,      // 50 simultaneous registered endpoints
-          duration:  '5m',
+          executor:    'per-vu-iterations',
+          vus:         50,      // 50 simultaneous registered endpoints
+          iterations:  1,
+          maxDuration: '5m30s',
         },
       },
       thresholds: {

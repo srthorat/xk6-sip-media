@@ -36,9 +36,10 @@ const pool = sip.loadCSV('./examples/csv/uas_users.csv');
 export const options = {
   scenarios: {
     uas: {
-      executor: 'constant-vus',
-      vus:      100,
-      duration: `${TEST_DUR_S}s`,
+      executor:    'per-vu-iterations',
+      vus:         100,
+      iterations:  1,
+      maxDuration: `${TEST_DUR_S + 30}s`,
     },
   },
   thresholds: {
