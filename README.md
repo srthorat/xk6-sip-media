@@ -40,6 +40,7 @@ export default function () {
 |---|---|---|
 | INVITE / ACK / BYE | ✅ | Full dialog management |
 | REGISTER + Digest Auth (401) | ✅ | Auto-retry on 401 challenge |
+| Registered UAS (REGISTER → answer inbound) | ✅ | `sip.registerAndListen()` — register, wait, answer, play, BYE |
 | Hold / Unhold (re-INVITE) | ✅ | `a=inactive` / `a=sendrecv` |
 | Blind Transfer (REFER) | ✅ | RFC 3515 |
 | Attended Transfer (REFER+Replaces) | ✅ | RFC 3891 |
@@ -401,7 +402,82 @@ reg.refresh();
 reg.unregister();
 ```
 
-> **Note:** `sip.dial3pcc()` and `sip.serve()` are implemented in Go (`sip/threepcc.go`, `sip/server.go`) but are not yet exposed as k6 JavaScript APIs.
+---
+
+### `sip.registerAndListen(opts)` — Registered UAS (inbound endpoint)
+
+Registers an AOR with a SIP proxy and immediately starts answering inbound calls.
+Each arriving `INVITE` is answered automatically: `100 Trying` → `200 OK` + SDP → RTP stream → wait for `BYE` or duration cap.  
+The registered contact port is taken from `listenAddr` so the proxy routes calls directly here.
+
+```javascript
+// Terminal 1 — register alice and answer all inbound calls
+const uas = sip.registerAndListen({
+  registrar:     'sip:pbx.example.com',
+  aor:           'sip:alice@pbx.example.com',
+  username:      'alice',
+  password:      'secret',
+  listenAddr:    '0.0.0.0:5070',   // port included in REGISTER Contact
+
+  audio:         { file: './examples/audio/sample.wav', codec: 'PCMU' },
+  duration:      '30s',            // per-call cap; '0s' = wait for BYE
+  maxConcurrent: 50,               // 486 Busy Here beyond this
+
+  // Optional
+  transport:     'udp',            // 'udp' | 'tcp' | 'tls'
+  expires:       3600,             // auto-refreshes at expires/2
+  echoMode:      false,            // true = reflect RTP back instead of file
+  tls:           { skipVerify: true },
+});
+
+sleep(600);   // stay registered for 10 minutes, answer all calls
+uas.stop();   // sends REGISTER Expires:0 then shuts down
+```
+
+**Handle methods:**
+| Method | Description |
+|---|---|
+| `uas.stop()` | Unregisters (Expires:0) and shuts down the UA |
+| `uas.unregister()` | Sends REGISTER Expires:0 without stopping the listener |
+
+**Option fields:**
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `registrar` | string | — | SIP registrar URI |
+| `aor` | string | — | Address of Record |
+| `username` | string | — | Digest auth username |
+| `password` | string | `""` | Digest auth password |
+| `listenAddr` | string | `0.0.0.0:5060` | Local SIP listen address; port goes in Contact |
+| `localIP` | string | auto | IP advertised in Contact + SDP |
+| `expires` | int | `3600` | Registration lifetime (s); auto-refresh at expires/2 |
+| `transport` | string | `"udp"` | `"udp"` \| `"tcp"` \| `"tls"` |
+| `audio.file` | string | — | WAV/MP3 file streamed to each caller |
+| `audio.codec` | string | `"PCMU"` | `PCMU` \| `PCMA` \| `G722` |
+| `duration` | string | `"0s"` | Per-call max duration; `"0s"` = hang up only on BYE |
+| `maxConcurrent` | int | `0` | Concurrent call cap per VU (0 = unlimited) |
+| `echoMode` | bool | `false` | Reflect incoming RTP back to caller |
+| `tls` | object | — | TLS config (same fields as `sip.call`) |
+
+**Multi-user example** — 50 VUs each register a unique AOR:
+
+```javascript
+function identity() {
+  return {
+    aor:        `sip:uas${__VU}@pbx.example.com`,
+    username:   `uas${__VU}`,
+    listenAddr: `0.0.0.0:${5070 + __VU}`,   // unique port per VU
+  };
+}
+
+export default function () {
+  const { aor, username, listenAddr } = identity();
+  const uas = sip.registerAndListen({ registrar, aor, username, password, listenAddr, audio: { file: AUDIO } });
+  sleep(290);
+  uas.stop();
+}
+```
+
+> **Note:** `sip.dial3pcc()` is implemented in Go (`sip/threepcc.go`) but is not yet exposed as a k6 JavaScript API.
 
 ---
 
@@ -451,6 +527,115 @@ export default function () {
 - Second line: header row (`username`, `password`, `domain`, `callee`, any extras)
 - Separator: comma or semicolon, auto-detected
 - Extra columns are passed through as strings on the returned object
+
+---
+
+## End-to-End: 100 Registered UAS ↔ 100 UAC Callers
+
+A complete two-terminal load test.  
+**Terminal 1** registers 100 UAS endpoints and waits for inbound calls.  
+**Terminal 2** registers 100 UAC users and places calls to every UAS endpoint.
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Terminal 1 (UAS)            Terminal 2 (UAC)        │
+│  uas001 ── REGISTER ──►      uac001 ── REGISTER ──►  │
+│  uas002 ── REGISTER ──►      uac002 ── REGISTER ──►  │
+│  …                           …                       │
+│  uas100 ── REGISTER ──►      uac100 ── REGISTER ──►  │
+│                                                      │
+│  uas001 ◄── INVITE ───── uac001 calls uas001        │
+│  uas002 ◄── INVITE ───── uac002 calls uas002        │
+│  …          RTP ↕            …                       │
+│  uas100 ◄── INVITE ───── uac100 calls uas100        │
+└─────────────────────────────────────────────────────┘
+```
+
+### Step 1 — CSV files (already created)
+
+Sample CSV files with 100 rows each are provided in the repo:
+
+| File | Description |
+|---|---|
+| [`examples/csv/uas_users.csv`](examples/csv/uas_users.csv) | UAS credentials — `uas001`–`uas100` (columns: `username, password, domain`) |
+| [`examples/csv/uac_users.csv`](examples/csv/uac_users.csv) | UAC credentials + paired callee — `uac001`–`uac100` (columns: `username, password, domain, callee`) |
+
+Update the `domain` column (and optionally `password`) to match your SIP environment before running.
+
+---
+
+### Step 2 — UAS script (Terminal 1)
+
+Each of the 100 VUs picks one row from the CSV, registers its AOR on a unique port, and answers every inbound call automatically.
+
+Full script: [`examples/k6/uas_load.js`](examples/k6/uas_load.js)
+
+Key environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `SIP_REGISTRAR` | `sip:sip.example.com` | SIP registrar URI |
+| `SIP_LISTEN_BASE` | `5100` | Base UDP port; VU N listens on `BASE+N` |
+| `SIP_AUDIO` | `./examples/audio/sample.wav` | Audio file to play on answered calls |
+| `SIP_CODEC` | `PCMU` | RTP codec |
+| `CALL_DURATION` | `30s` | Per-call time cap (`0s` = wait for BYE) |
+| `MAX_CONCURRENT` | `5` | Max simultaneous calls per VU |
+| `TEST_DURATION_S` | `300` | Total test duration in seconds |
+
+---
+
+### Step 3 — UAC script (Terminal 2)
+
+Each of the 100 VUs registers as a UAC and places one call to its paired UAS endpoint.
+
+Full script: [`examples/k6/uac_load.js`](examples/k6/uac_load.js)
+
+Key environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `SIP_REGISTRAR` | `sip:sip.example.com` | SIP registrar URI |
+| `SIP_AUDIO` | `./examples/audio/sample.wav` | Audio file to send |
+| `SIP_CODEC` | `PCMU` | RTP codec |
+| `CALL_DURATION` | `30s` | Duration of each call |
+
+Thresholds: `sip_call_success >= 95` (≤5% failure allowed), `mos_score avg >= 3.5`
+
+---
+
+### Step 4 — Run
+
+```bash
+# Terminal 1 — start UAS first so all endpoints are registered before calls arrive
+SIP_REGISTRAR=sip:pbx.example.com \
+SIP_AUDIO=./examples/audio/sample.wav \
+  ./k6 run examples/k6/uas_load.js
+
+# Wait ~5 s for all 100 UAS VUs to register, then:
+
+# Terminal 2 — start UAC callers
+SIP_REGISTRAR=sip:pbx.example.com \
+SIP_AUDIO=./examples/audio/sample.wav \
+  ./k6 run examples/k6/uac_load.js
+```
+
+**Expected output (Terminal 2 summary):**
+```
+✓ call succeeded   100/100
+✓ MOS >= 3.5       100/100
+✓ loss < 5%        100/100
+
+sip_register_success.: 100
+sip_call_success.....: 100
+mos_score............: avg=4.3  min=3.9  max=4.5
+rtp_jitter_ms........: avg=0.8 ms
+rtp_packets_sent.....: 150 000
+rtp_packets_received.: 148 500
+```
+
+> **Port budget:** UAS VU N listens on port `LISTEN_BASE + N` (default 5101–5200).  
+> Ensure your firewall allows UDP 5100–5200 inbound.  
+> Raise the OS limit if needed: `ulimit -n 50000`
 
 ---
 
@@ -663,7 +848,8 @@ k6 cloud examples/k6/scenarios/05_soak.js
 | 30 | OPTIONS Ping | High frequency connectionless SIP heartbeat checks |
 | 33 | Multi-User CSV | Concurrent calls from CSV credential pool |
 | 34 | CSV Ramp | Ramping VUs with CSV credentials |
-| 35 | CANCEL Load | CANCEL mid-INVITE stress test — validates 487 handling at scale |
+| 35 | CANCEL Load | CANCEL storm — flood INVITE then immediately CANCEL |
+| 36 | Registered UAS | Register → wait for inbound call → answer → play → BYE |
 
 ### Base examples (non-numbered)
 | File | Description |
@@ -671,6 +857,9 @@ k6 cloud examples/k6/scenarios/05_soak.js
 | `call.js` | Minimal single-call example |
 | `register_only.js` | Register only example |
 | `register_call.js` | Register then call |
+| `registered_uas.js` | Registered UAS — login, wait for inbound call, answer, play, BYE |
+| `uas_load.js` | 100-VU UAS load test — register 100 endpoints, answer all inbound calls |
+| `uac_load.js` | 100-VU UAC load test — register 100 callers, call paired UAS endpoints |
 | `ivr_flow.js` | IVR + AI transcript validation |
 | `vonage_direct_call.js` | Vonage direct call without prior REGISTER |
 | `vonage_ivr_flow.js` | Vonage IVR flow: dial 443362, send DTMF 1, then BYE |
@@ -691,8 +880,9 @@ xk6-sip-media/
 │
 ├── k6ext/                    # k6 JS binding layer
 │   ├── module.go             # RootModule, initialization
-│   ├── sip.go                # call(), dial(), register(), conference(), options(), loadCSV()
+│   ├── sip.go                # call(), dial(), register(), registerAndListen(), conference(), options(), loadCSV()
 │   ├── call_handle.go        # All mid-call methods (hold, transfer, DTMF, etc.)
+│   ├── registered_uas.go     # K6RegisteredUAS wrapper (stop, unregister)
 │   ├── healthcheck.go        # startHealthCheck() — background OPTIONS loop
 │   ├── conference.go         # Conference JS wrapper
 │   ├── registration.go       # Registration JS wrapper
@@ -710,13 +900,13 @@ xk6-sip-media/
 │   ├── hold.go               # Hold/Unhold (re-INVITE)
 │   ├── transfer.go           # Blind + Attended REFER
 │   ├── register.go           # REGISTER + Digest Auth
+│   ├── registered_uas.go     # RegisteredUAS: register + listen + answer + BYE
 │   ├── conference.go         # Bridge conference manager
-│   ├── server.go             # UAS: answer inbound calls
+│   ├── server.go             # UAS: answer inbound calls (raw, no registration)
 │   ├── info.go               # SIP INFO method
 │   ├── vars.go               # Variable extraction from responses
 │   ├── healthcheck.go        # Background OPTIONS ping loop
 │   ├── threepcc.go           # 3PCC orchestration (Go only; no JS binding yet)
-│   ├── server.go             # UAS: answer inbound calls (Go only; no JS binding yet)
 │   ├── retransmit.go         # RetransmitConfig struct
 │   └── transport_utils.go    # applyRetransmitConfig, sipgo retransmit hook
 │
@@ -765,8 +955,11 @@ xk6-sip-media/
         ├── transfer_blind.js     # Blind transfer
         ├── transfer_attended.js  # Attended transfer
         ├── register_call.js      # Register then call
+        ├── registered_uas.js     # Registered UAS: login → wait → answer → play → BYE
+        ├── uas_load.js           # 100-VU UAS load test (register + answer inbound)
+        ├── uac_load.js           # 100-VU UAC load test (register + call UAS endpoints)
         ├── ivr_flow.js           # IVR + AI validation
-        └── scenarios/            # 29 load scenarios (01–35)
+        └── scenarios/            # 31 load scenarios (01–36)
 ```
 
 ---
