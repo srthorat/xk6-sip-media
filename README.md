@@ -50,7 +50,7 @@ flowchart TD
         SRTP["SRTP\nAES-CM-128-HMAC-SHA1-80"]
         RTCP["RTCP SR/RR\nJitter · RTT · Loss"]
         DTMF["DTMF Collector\nRFC 2833 IVR validation"]
-        MOS["Quality Metrics\nMOS · PESQ · Silence ratio"]
+        MOS["Quality Metrics\nMOS · Silence ratio · PESQ (planned)"]
     end
 
     subgraph obs["Observability"]
