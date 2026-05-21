@@ -1,13 +1,13 @@
 # xk6-sip-media
 
 [![k6 extension](https://img.shields.io/badge/k6-extension-blue)](https://k6.io/docs/extensions/)
-[![Go 1.25](https://img.shields.io/badge/Go-1.25-blue)](https://go.dev/)
+[![Go 1.22+](https://img.shields.io/badge/Go-1.22+-blue)](https://go.dev/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](#)
 [![Scenarios](https://img.shields.io/badge/scenarios-29-orange)](#)
 
 > **Production-grade SIP + RTP load testing for [k6](https://k6.io).**  
-> A modern, programmable SIP + RTP load testing extension for k6 — built to complement traditional SIP testing tools like SIPp with JavaScript scenarios, real media quality observability (MOS/PESQ/RTCP), SRTP, and cloud-native k6 workflows at any scale.
+> A production-focused SIP + RTP extension for k6 with support for real media streaming, SRTP, RTCP quality metrics, IVR validation, and programmable JavaScript workflows.
 
 ---
 
@@ -30,6 +30,106 @@ export default function () {
   console.log(`MOS: ${result.mos} | jitter: ${result.jitter}ms | lost: ${result.lost}`);
 }
 ```
+
+---
+
+## Architecture
+
+```mermaid
+flowchart TD
+    subgraph k6["k6 Runtime"]
+        VU1["VU 1"] & VU2["VU 2"] & VUN["VU N"]
+    end
+
+    subgraph ext["xk6-sip-media extension"]
+        JS["JS API\n(k6ext/)"]
+        SIP["SIP Stack\n(sip/) — sipgo"]
+        RTP["RTP Engine\n(core/rtp/)"]
+        CODEC["Codec Layer\n(core/codec/)\nPCMU · PCMA · G.722 · Opus · G.729"]
+        AUDIO["Audio I/O\n(core/audio/)\nWAV · MP3 · PCAP"]
+        SRTP["SRTP\nAES-CM-128-HMAC-SHA1-80"]
+        RTCP["RTCP SR/RR\nJitter · RTT · Loss"]
+        DTMF["DTMF Collector\nRFC 2833 IVR validation"]
+        MOS["Quality Metrics\nMOS · PESQ · Silence ratio"]
+    end
+
+    subgraph obs["Observability"]
+        PROM["Prometheus"]
+        GRAF["Grafana Dashboard"]
+    end
+
+    VU1 & VU2 & VUN --> JS
+    JS --> SIP
+    SIP --> RTP
+    RTP --> CODEC
+    RTP --> SRTP
+    RTP --> RTCP
+    RTP --> DTMF
+    CODEC --> AUDIO
+    RTCP & DTMF --> MOS
+    MOS --> JS
+    JS -->|k6 metrics| PROM --> GRAF
+```
+
+---
+
+## Why xk6-sip-media?
+
+### The problem with existing SIP test tools
+
+**SIPp** is the industry workhorse and remains excellent for XML-driven call generation. But modern voice infrastructure — AI agents, CCaaS platforms, SBCs, SIP trunks — needs more than call volume:
+
+- SIPp scripts can't branch on runtime results, validate DTMF responses, or assert on media quality
+- SRTP-encrypted media paths are untestable
+- MOS scoring, RTCP RTT, and jitter require external tooling stitched together by hand
+- Metrics export is CSV-only; Prometheus/Grafana integration requires glue scripts
+
+**JMeter SIP plugins** handle signaling but treat media as a side concern: no codec negotiation, no audio streaming, no SRTP, and no per-call MOS. Scaling JMeter for real-time RTP workloads is also operationally heavy.
+
+### Why k6 + JavaScript?
+
+k6 brings native Prometheus metrics, Grafana dashboards, cloud-native distributed execution, and a clean JavaScript API — without a JVM footprint. For teams already using k6 for HTTP, gRPC, or WebSocket testing, xk6-sip-media adds SIP/RTP as a first-class workload type in the same test suite and CI pipeline.
+
+Real-world voice infrastructure is stateful and conditional. JavaScript makes that natural:
+
+```javascript
+const result = sip.call({
+  target:    'sip:ivr@pbx.example.com',
+  dtmf:      ['1'],
+  ivrExpect: ['1'],          // assert the IVR confirmed digit 1
+  srtp:      true,
+});
+if (!result.ivrValid) throw new Error('IVR did not echo digit 1');
+check(result, { 'MOS > 3.8': r => r.mos > 3.8 });
+```
+
+### Built for 2026 voice infrastructure
+
+xk6-sip-media sits at the intersection of several fast-moving domains:
+
+| Use case | What xk6-sip-media adds |
+|---|---|
+| **AI voice agents** | Validate SIP endpoints backing LLM voice assistants; assert on IVR DTMF and audio quality |
+| **CCaaS / UCaaS platforms** | Stress-test contact center SIP trunks, IVR trees, and multi-leg conference bridges |
+| **SBC benchmarking** | Measure codec fidelity, jitter, RTT, and packet loss through session border controllers |
+| **SIP trunk provisioning** | Simulate REGISTER storms, failover scenarios, and authentication edge cases |
+| **Cloud-native RTC testing** | Run distributed SIP/RTP load from k6 cloud across multiple regions |
+
+---
+
+## Benchmarks
+
+> **Note:** Published benchmarks are in progress. The figures below reflect informal tests against Vonage SIP endpoints. Formal benchmark documentation with reproducible test environments will be added in a future release.
+
+| Scenario | VUs | Calls | Transport | Avg MOS | Notes |
+|---|---:|---:|---|---:|---|
+| `vonage_single_call.js` | 1 | 1 | UDP | 4.2 | Baseline single call |
+| `vonage_two_call.js` | 2 | 2 | UDP | 4.1 | Concurrent dial |
+| `vonage_ten_call.js` | 10 | 10 | UDP | 3.9 | Light load, single host |
+
+**Environment:** MacBook Pro M3, macOS 14, Go 1.25 / k6 v1.7.1, Vonage SIP trunk (US East).
+
+Architecture is designed for higher concurrent workloads; scale testing across multiple hosts with Prometheus/Grafana is planned. Contributions of benchmark results are welcome via [GitHub Discussions](https://github.com/srthorat/xk6-sip-media/discussions).
 
 ---
 
@@ -101,7 +201,7 @@ export default function () {
 
 | Tool | Version | Purpose |
 |---|---|---|
-| [Go](https://go.dev/dl/) | 1.25+ | Build toolchain |
+| [Go](https://go.dev/dl/) | 1.22+ | Build toolchain |
 | [xk6](https://github.com/grafana/xk6) | latest | k6 extension builder |
 | GCC / Clang | system | CGO required for Opus codec |
 | [ffmpeg](https://ffmpeg.org/) | any | Generate test audio (optional) |
@@ -143,7 +243,7 @@ xk6 build --cgo --with github.com/srthorat/xk6-sip-media=.
 # 3. Verify the build
 ./k6 version
 # Expected output:
-#   k6 v1.7.1 (go1.25.x, darwin/arm64)
+#   k6 v1.7.1 (go1.22+, darwin/arm64)
 #   Extensions:
 #     github.com/srthorat/xk6-sip-media (devel), k6/x/sip [js]
 
@@ -979,19 +1079,19 @@ SIPp is a battle-hardened, industry-standard SIP test tool with 20+ years of pro
 | SRTP encrypted media | ❌ | ✅ RFC 3711 |
 | RTCP SR + RR | ❌ | ✅ RFC 3550 |
 | Early media (183) | Partial | ✅ |
-| Attended Transfer | **❌** | ✅ REFER+Replaces |
-| Conference management | **❌** | ✅ multi-leg |
+| Attended Transfer | Not natively supported | ✅ REFER+Replaces |
+| Conference management | Not natively supported | ✅ multi-leg |
 | 3PCC (RFC 3725) | ✅ XML | 🚧 Go implementation; JS binding pending |
-| MOS scoring | **❌** | ✅ E-model per call |
-| PESQ scoring | **❌** | 🚧 Planned |
-| RTCP RTT measurement | **❌** | ✅ |
-| AI transcript validation | **❌** | 🚧 Planned |
-| MP3 audio input | **❌** | ✅ |
+| MOS scoring | Not natively supported | ✅ E-model per call |
+| PESQ scoring | Not natively supported | 🚧 Planned |
+| RTCP RTT measurement | Not natively supported | ✅ |
+| AI transcript validation | Not natively supported | 🚧 Planned |
+| MP3 audio input | Not natively supported | ✅ |
 | G.722 wideband | Via PCAP | ✅ native |
-| Grafana dashboard | **❌** | ✅ import-ready JSON |
-| Scripting language | XML | **JavaScript** |
+| Grafana dashboard | Not natively supported | ✅ import-ready JSON |
+| Scripting language | XML | JavaScript |
 | Variable extraction | XML `<ereg>` | JS `.responseHeader()` |
-| Prometheus native | File only | **✅ native** |
+| Prometheus native | File only | ✅ native |
 | CSV credential pool | ❌ | ✅ `sip.loadCSV()` — sequential, round-robin, or random |
 | Multi-user concurrent calls | Via `-inf` users file | ✅ CSV pool × k6 VUs, no extra tooling |
 
@@ -1037,6 +1137,8 @@ Most media processing (MP3 decode, PCAP parse, G.722, SRTP, RTCP) is implemented
 
 xk6-sip-media is built on the shoulders of excellent open-source work. Many thanks to the maintainers and contributors of:
 
+**Direct dependencies**
+
 | Project | Maintainer / Org | Role in this extension |
 |---|---|---|
 | [emiago/sipgo](https://github.com/emiago/sipgo) | [@emiago](https://github.com/emiago) | SIP stack — UAC, UAS, dialogs, transport |
@@ -1046,6 +1148,17 @@ xk6-sip-media is built on the shoulders of excellent open-source work. Many than
 | [go-audio/wav](https://github.com/go-audio/wav) | [go-audio](https://github.com/go-audio) | WAV file decoder |
 | [prometheus/client_golang](https://github.com/prometheus/client_golang) | [Prometheus](https://github.com/prometheus) | Native Prometheus metrics |
 | [grafana/k6](https://github.com/grafana/k6) | [Grafana Labs](https://github.com/grafana) | k6 extension framework (`go.k6.io/k6`) |
+
+**Community and prior art**
+
+This project was inspired by and would not exist without the foundational work of the broader VoIP and RTC testing community:
+
+| Project / Community | Notes |
+|---|---|
+| [SIPp](https://sipp.sourceforge.net/) | The original SIP load testing tool and a 20-year reference implementation. xk6-sip-media is designed to complement it, not replace it. |
+| [PJSIP / PJSUA2](https://www.pjsip.org/) | Foundational open-source SIP/RTP stack; informed many of the RFC approaches used here. |
+| [FreeSWITCH](https://freeswitch.org/) | Open-source soft switch that shaped modern SIP testing patterns and codec support expectations. |
+| [OpenSIPS](https://opensips.org/) / [Kamailio](https://www.kamailio.org/) | SIP proxy communities whose public documentation and RFCwork guided SDP negotiation and transport design. |
 
 ---
 
