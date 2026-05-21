@@ -90,7 +90,7 @@ export default function () {
 | RTT (round-trip time) | ✅ | Via RTCP DLSR calculation |
 | Packet loss % | ✅ | RTP sequence gap detection |
 | Silence ratio | ✅ | Energy-based silence detection |
-| IVR validation | 🚧 | Field present; no rule engine wired yet |
+| IVR validation | ✅ | Validates inbound RFC 2833 DTMF sequence from IVR (set `ivrExpect: ['1','3']` in call options) |
 | AI transcript (Whisper) | 🚧 | Planned; not yet wired |
 
 ---
@@ -297,6 +297,7 @@ const result = sip.call({
 
   // ── DTMF ──────────────────────────────────────────────────────
   dtmf: ['1', '2', '#'],  // RFC 2833 sequence (2s inter-digit delay)
+  ivrExpect: ['1', '2'],    // digits expected back from IVR (sets ivr_ok in result)
 
   // ── Security ──────────────────────────────────────────────────
   srtp:      false,    // true = AES-CM-128-HMAC-SHA1-80 media encryption
@@ -1027,6 +1028,22 @@ Most media processing (MP3 decode, PCAP parse, G.722, SRTP, RTCP) is implemented
 ### Medium-term
 - [ ] **Docker image** — pre-built k6 + extension
 - [ ] **k6 cloud distributed guide** — multi-region SIP load generation
+
+---
+
+## Acknowledgements
+
+xk6-sip-media is built on the shoulders of excellent open-source work. Many thanks to the maintainers and contributors of:
+
+| Project | Maintainer / Org | Role in this extension |
+|---|---|---|
+| [emiago/sipgo](https://github.com/emiago/sipgo) | [@emiago](https://github.com/emiago) | SIP stack — UAC, UAS, dialogs, transport |
+| [pion/rtp](https://github.com/pion/rtp) | [Pion](https://github.com/pion) | RTP packet marshal / unmarshal |
+| [zaf/g711](https://github.com/zaf/g711) | [@zaf](https://github.com/zaf) | G.711 µ-law and A-law codec |
+| [hajimehoshi/go-mp3](https://github.com/hajimehoshi/go-mp3) | [@hajimehoshi](https://github.com/hajimehoshi) | Pure-Go MP3 decoder (no CGO required) |
+| [go-audio/wav](https://github.com/go-audio/wav) | [go-audio](https://github.com/go-audio) | WAV file decoder |
+| [prometheus/client_golang](https://github.com/prometheus/client_golang) | [Prometheus](https://github.com/prometheus) | Native Prometheus metrics |
+| [grafana/k6](https://github.com/grafana/k6) | [Grafana Labs](https://github.com/grafana) | k6 extension framework (`go.k6.io/k6`) |
 
 ---
 

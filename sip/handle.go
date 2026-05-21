@@ -38,6 +38,7 @@ type CallHandle struct {
 	rtcpSess  *corertp.RTCPSession
 	recorder  *corertp.AudioRecorder
 	recPath   string
+	dtmfColl  *corertp.DTMFCollector // non-nil when cfg.IVRExpect is set
 
 	// ── SRTP (optional) ────────────────────────────────────────────────────
 	srtpSender   *corertp.SRTPSession
@@ -163,6 +164,7 @@ func (h *CallHandle) startFinalize() {
 			RecorderDrops:      recorderDrops,
 			BytesSent:          h.sendStats.BytesSent.Load(),
 			BytesReceived:      snap.BytesReceived,
+			IVRValid:           h.dtmfColl != nil && h.dtmfColl.MatchesExpected(h.cfg.IVRExpect),
 		}
 		h.mu.Unlock()
 

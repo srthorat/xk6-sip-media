@@ -403,7 +403,8 @@ func (p *StreamSRTPPlayer) Tick() bool {
 // ReceiveSRTP reads SRTP packets, decrypts them, and updates stats.
 // silenceSize is the byte length of one encoded 20ms payload for the active
 // codec, used to synthesize PLC silence on packet loss (0 = skip PLC writes).
-func ReceiveSRTP(conn *net.UDPConn, srtp *SRTPSession, stats *RTPStats, recorder *AudioRecorder, silenceSize int, stop <-chan struct{}) {
+// dtmf is an optional collector for inbound RFC 2833 telephone-event digits.
+func ReceiveSRTP(conn *net.UDPConn, srtp *SRTPSession, stats *RTPStats, recorder *AudioRecorder, silenceSize int, stop <-chan struct{}, dtmf *DTMFCollector) {
 	buf := make([]byte, 1500)
 
 	var jb *JitterBuffer
@@ -442,6 +443,17 @@ func ReceiveSRTP(conn *net.UDPConn, srtp *SRTPSession, stats *RTPStats, recorder
 		arrival := time.Now()
 		stats.update(pkt.SequenceNumber, arrival)
 		stats.BytesReceived.Add(int64(n))
+
+		// RFC 2833 telephone-event: collect inbound DTMF digits.
+		// Use the negotiated PT stored in the collector instead of the hard-coded
+		// constant so calls where the remote negotiates a different dynamic PT
+		// are handled correctly.
+		if dtmf != nil && pkt.PayloadType == dtmf.PT {
+			if digit, end, ok := decodeDTMFEvent(pkt.Payload); ok && end {
+				dtmf.accept(pkt.Timestamp, pkt.Payload[0], digit)
+			}
+			continue
+		}
 
 		if jb != nil && len(pkt.Payload) > 0 {
 			jb.Push(&pkt)

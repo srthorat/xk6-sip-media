@@ -319,15 +319,29 @@ func Dial(cfg CallConfig) (*CallHandle, error) {
 		active:       true,
 	}
 
+	// 15b. IVR DTMF collector — only allocated when ivrExpect is configured.
+	// Look up the negotiated telephone-event PT from the SDP answer; fall back
+	// to the standard dynamic PT 101 when the remote did not advertise one.
+	if len(cfg.IVRExpect) > 0 {
+		telPT := corertp.DTMFPayloadType
+		for pt, name := range inviteResult.PtMap {
+			if name == "TELEPHONE-EVENT" {
+				telPT = pt
+				break
+			}
+		}
+		h.dtmfColl = corertp.NewDTMFCollector(telPT)
+	}
+
 	// 16. RTP goroutines
 	h.wg.Add(1)
 	plcSize := plcPayloadSize(cod.Name())
 	go func() {
 		defer h.wg.Done()
 		if srtpReceiver != nil {
-			corertp.ReceiveSRTP(conn, srtpReceiver, h.recvStats, recorder, plcSize, h.stop)
+			corertp.ReceiveSRTP(conn, srtpReceiver, h.recvStats, recorder, plcSize, h.stop, h.dtmfColl)
 		} else {
-			corertp.Receive(conn, h.recvStats, recorder, plcSize, h.stop)
+			corertp.Receive(conn, h.recvStats, recorder, plcSize, h.stop, h.dtmfColl)
 		}
 	}()
 
