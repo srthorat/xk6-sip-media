@@ -403,6 +403,13 @@ func parseCfg(opts map[string]interface{}) sipcall.CallConfig {
 			}
 		}
 	}
+	if ivrExpect, ok := opts["ivrExpect"].([]interface{}); ok {
+		for _, d := range ivrExpect {
+			if s, ok := d.(string); ok {
+				cfg.IVRExpect = append(cfg.IVRExpect, s)
+			}
+		}
+	}
 	if v, ok := opts["dtmfInitialDelay"].(string); ok {
 		if d, err := time.ParseDuration(v); err == nil {
 			cfg.DTMFInitialDelay = d

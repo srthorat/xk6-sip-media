@@ -319,15 +319,20 @@ func Dial(cfg CallConfig) (*CallHandle, error) {
 		active:       true,
 	}
 
+	// 15b. IVR DTMF collector — only allocated when ivrExpect is configured.
+	if len(cfg.IVRExpect) > 0 {
+		h.dtmfColl = &corertp.DTMFCollector{}
+	}
+
 	// 16. RTP goroutines
 	h.wg.Add(1)
 	plcSize := plcPayloadSize(cod.Name())
 	go func() {
 		defer h.wg.Done()
 		if srtpReceiver != nil {
-			corertp.ReceiveSRTP(conn, srtpReceiver, h.recvStats, recorder, plcSize, h.stop)
+			corertp.ReceiveSRTP(conn, srtpReceiver, h.recvStats, recorder, plcSize, h.stop, h.dtmfColl)
 		} else {
-			corertp.Receive(conn, h.recvStats, recorder, plcSize, h.stop)
+			corertp.Receive(conn, h.recvStats, recorder, plcSize, h.stop, h.dtmfColl)
 		}
 	}()
 

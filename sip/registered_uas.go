@@ -452,7 +452,7 @@ func (r *RegisteredUAS) handleInvite(req *sipmsg.Request, tx sipmsg.ServerTransa
 		if r.cfg.EchoMode {
 			corertp.Echo(conn, remoteAddr, recvStats, cs.ch)
 		} else {
-			corertp.Receive(conn, recvStats, recorder, plcPayloadSize(cod.Name()), cs.ch)
+			corertp.Receive(conn, recvStats, recorder, plcPayloadSize(cod.Name()), cs.ch, nil)
 		}
 	}()
 

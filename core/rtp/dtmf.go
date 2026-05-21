@@ -1,6 +1,7 @@
 package rtp
 
 import (
+	"sync"
 	"time"
 
 	pionrtp "github.com/pion/rtp"
@@ -15,6 +16,82 @@ var digitCode = map[string]byte{
 	"5": 5, "6": 6, "7": 7, "8": 8, "9": 9,
 	"*": 10, "#": 11,
 	"A": 12, "B": 13, "C": 14, "D": 15,
+}
+
+// codeDigit is the reverse of digitCode: RFC 2833 event code → digit string.
+var codeDigit [16]string
+
+func init() {
+	for d, c := range digitCode {
+		codeDigit[c] = d
+	}
+}
+
+// decodeDTMFEvent decodes a 4-byte RFC 2833 telephone-event payload.
+// Returns the digit string, whether this is the end-of-event packet, and ok.
+func decodeDTMFEvent(payload []byte) (digit string, end bool, ok bool) {
+	if len(payload) < 4 {
+		return "", false, false
+	}
+	code := payload[0]
+	if int(code) >= len(codeDigit) || codeDigit[code] == "" {
+		return "", false, false
+	}
+	return codeDigit[code], payload[1]&0x80 != 0, true
+}
+
+// DTMFCollector collects DTMF digits received as inbound RFC 2833 telephone-event
+// packets. It deduplicates multi-packet events (only the end-of-event packet counts)
+// so each user-visible digit is recorded exactly once.
+// All methods are goroutine-safe.
+type DTMFCollector struct {
+	mu      sync.Mutex
+	digits  []string
+	lastSeq uint16 // sequence number of the last accepted end event
+	seeded  bool
+}
+
+// accept records a single digit (called on end-of-event packet).
+func (c *DTMFCollector) accept(seq uint16, digit string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.seeded && c.lastSeq == seq {
+		return // duplicate end packet — skip
+	}
+	c.lastSeq = seq
+	c.seeded = true
+	c.digits = append(c.digits, digit)
+}
+
+// Digits returns a snapshot of all collected digits in order of arrival.
+func (c *DTMFCollector) Digits() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	cp := make([]string, len(c.digits))
+	copy(cp, c.digits)
+	return cp
+}
+
+// MatchesExpected returns true when every digit in expected appears in the
+// collected sequence in order (subsequence / prefix match).
+// An empty expected slice always returns true.
+func (c *DTMFCollector) MatchesExpected(expected []string) bool {
+	if len(expected) == 0 {
+		return true
+	}
+	c.mu.Lock()
+	got := c.digits
+	c.mu.Unlock()
+	ei := 0
+	for _, d := range got {
+		if d == expected[ei] {
+			ei++
+			if ei == len(expected) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // SendDTMF transmits a single DTMF digit as RFC 2833 RTP telephone-event packets.

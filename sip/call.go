@@ -112,6 +112,13 @@ type CallConfig struct {
 	// starts. If the call is in the ringing phase (e.g., 180), this natively
 	// triggers a SIP CANCEL request instead of a BYE.
 	CancelAfter time.Duration
+
+	// IVRExpect is an ordered list of DTMF digits expected to be received from
+	// the remote IVR during the call. When non-empty, IVRValid in CallResult is
+	// set to true only when all digits appear (in order) among the received
+	// RFC 2833 telephone-event packets.
+	// Example: []string{"1", "3"} — IVR must echo back "1" then "3".
+	IVRExpect []string
 }
 
 // StartCall executes a complete SIP call: INVITE → RTP stream → BYE.

@@ -213,7 +213,7 @@ func (s *Server) handleInvite(req *sipmsg.Request, tx sipmsg.ServerTransaction) 
 		if s.cfg.EchoMode {
 			corertp.Echo(conn, remoteAddr, recvStats, stop)
 		} else {
-			corertp.Receive(conn, recvStats, recorder, plcPayloadSize(cod.Name()), stop)
+			corertp.Receive(conn, recvStats, recorder, plcPayloadSize(cod.Name()), stop, nil)
 		}
 	}()
 
