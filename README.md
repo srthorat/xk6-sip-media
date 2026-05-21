@@ -7,7 +7,7 @@
 [![Scenarios](https://img.shields.io/badge/scenarios-29-orange)](#)
 
 > **Production-grade SIP + RTP load testing for [k6](https://k6.io).**  
-> The only k6 extension that tests real SIP signaling, live RTP audio, SRTP encryption, voice quality (MOS/PESQ/RTCP), and complex call flows at any scale — surpassing SIPp in programmability, codec support, and quality observability.
+> A modern, programmable SIP + RTP load testing extension for k6 — built to complement traditional SIP testing tools like SIPp with JavaScript scenarios, real media quality observability (MOS/PESQ/RTCP), SRTP, and cloud-native k6 workflows at any scale.
 
 ---
 
@@ -965,7 +965,9 @@ xk6-sip-media/
 
 ---
 
-## vs SIPp Comparison
+## SIPp + xk6-sip-media — Complementary Tools
+
+SIPp is a battle-hardened, industry-standard SIP test tool with 20+ years of production use. xk6-sip-media is designed to complement it by bringing programmable JavaScript scenarios, real media quality telemetry, and cloud-native k6 workflows to teams that already use or love k6.
 
 | Capability | SIPp | xk6-sip-media |
 |---|---|---|
