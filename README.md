@@ -1,7 +1,7 @@
 # xk6-sip-media
 
 [![k6 extension](https://img.shields.io/badge/k6-extension-blue)](https://k6.io/docs/extensions/)
-[![Go 1.22+](https://img.shields.io/badge/Go-1.22+-blue)](https://go.dev/)
+[![Go 1.25+](https://img.shields.io/badge/Go-1.25+-blue)](https://go.dev/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](#)
 [![Scenarios](https://img.shields.io/badge/scenarios-29-orange)](#)
@@ -201,7 +201,7 @@ Architecture is designed for higher concurrent workloads; scale testing across m
 
 | Tool | Version | Purpose |
 |---|---|---|
-| [Go](https://go.dev/dl/) | 1.22+ | Build toolchain |
+| [Go](https://go.dev/dl/) | 1.25+ | Build toolchain |
 | [xk6](https://github.com/grafana/xk6) | latest | k6 extension builder |
 | GCC / Clang | system | CGO required for Opus codec |
 | [ffmpeg](https://ffmpeg.org/) | any | Generate test audio (optional) |
@@ -243,7 +243,7 @@ xk6 build --cgo --with github.com/srthorat/xk6-sip-media=.
 # 3. Verify the build
 ./k6 version
 # Expected output:
-#   k6 v1.7.1 (go1.22+, darwin/arm64)
+#   k6 v1.7.1 (go1.25.x, darwin/arm64)
 #   Extensions:
 #     github.com/srthorat/xk6-sip-media (devel), k6/x/sip [js]
 
