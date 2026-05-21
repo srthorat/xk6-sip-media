@@ -1158,7 +1158,7 @@ This project was inspired by and would not exist without the foundational work o
 | [SIPp](https://sipp.sourceforge.net/) | The original SIP load testing tool and a 20-year reference implementation. xk6-sip-media is designed to complement it, not replace it. |
 | [PJSIP / PJSUA2](https://www.pjsip.org/) | Foundational open-source SIP/RTP stack; informed many of the RFC approaches used here. |
 | [FreeSWITCH](https://freeswitch.org/) | Open-source soft switch that shaped modern SIP testing patterns and codec support expectations. |
-| [OpenSIPS](https://opensips.org/) / [Kamailio](https://www.kamailio.org/) | SIP proxy communities whose public documentation and RFCwork guided SDP negotiation and transport design. |
+| [OpenSIPS](https://opensips.org/) / [Kamailio](https://www.kamailio.org/) | SIP proxy communities whose public documentation and RFC work guided SDP negotiation and transport design. |
 
 ---
 
