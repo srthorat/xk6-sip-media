@@ -47,18 +47,35 @@ func decodeDTMFEvent(payload []byte) (digit string, end bool, ok bool) {
 type DTMFCollector struct {
 	mu      sync.Mutex
 	digits  []string
-	lastSeq uint16 // sequence number of the last accepted end event
+	PT      uint8  // negotiated telephone-event payload type
+	lastTS  uint32 // RTP timestamp of the last accepted end event
+	lastEvt byte   // RFC 2833 event code of the last accepted end event
 	seeded  bool
 }
 
+// NewDTMFCollector creates a collector for inbound telephone-event packets
+// with the given negotiated payload type. If telPT is 0 the standard
+// dynamic PT 101 is used as the default.
+func NewDTMFCollector(telPT uint8) *DTMFCollector {
+	pt := telPT
+	if pt == 0 {
+		pt = DTMFPayloadType
+	}
+	return &DTMFCollector{PT: pt}
+}
+
 // accept records a single digit (called on end-of-event packet).
-func (c *DTMFCollector) accept(seq uint16, digit string) {
+// Deduplication is based on (RTP timestamp, event code) — RFC 2833 allows
+// multiple retransmissions of the end packet with incrementing sequence numbers
+// but the same timestamp, so seq-based dedup would record false duplicates.
+func (c *DTMFCollector) accept(ts uint32, eventCode byte, digit string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.seeded && c.lastSeq == seq {
-		return // duplicate end packet — skip
+	if c.seeded && c.lastTS == ts && c.lastEvt == eventCode {
+		return // retransmission of the same end-of-event — skip
 	}
-	c.lastSeq = seq
+	c.lastTS = ts
+	c.lastEvt = eventCode
 	c.seeded = true
 	c.digits = append(c.digits, digit)
 }
@@ -80,7 +97,8 @@ func (c *DTMFCollector) MatchesExpected(expected []string) bool {
 		return true
 	}
 	c.mu.Lock()
-	got := c.digits
+	got := make([]string, len(c.digits)) // deep copy under lock to avoid race
+	copy(got, c.digits)
 	c.mu.Unlock()
 	ei := 0
 	for _, d := range got {

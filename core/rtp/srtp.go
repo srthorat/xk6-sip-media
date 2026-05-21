@@ -445,9 +445,12 @@ func ReceiveSRTP(conn *net.UDPConn, srtp *SRTPSession, stats *RTPStats, recorder
 		stats.BytesReceived.Add(int64(n))
 
 		// RFC 2833 telephone-event: collect inbound DTMF digits.
-		if dtmf != nil && pkt.PayloadType == DTMFPayloadType {
+		// Use the negotiated PT stored in the collector instead of the hard-coded
+		// constant so calls where the remote negotiates a different dynamic PT
+		// are handled correctly.
+		if dtmf != nil && pkt.PayloadType == dtmf.PT {
 			if digit, end, ok := decodeDTMFEvent(pkt.Payload); ok && end {
-				dtmf.accept(pkt.SequenceNumber, digit)
+				dtmf.accept(pkt.Timestamp, pkt.Payload[0], digit)
 			}
 			continue
 		}
