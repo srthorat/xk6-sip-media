@@ -259,6 +259,113 @@ func (m *SIPModule) Conference(opts map[string]interface{}) *K6Conference {
 	return &K6Conference{conf: conf}
 }
 
+// ── sip.registerAndListen() ─────────────────────────────────────────────────
+
+// RegisterAndListen registers the AOR with a SIP proxy and starts listening
+// for inbound INVITEs.  Each incoming call is answered automatically: the UAS
+// sends 200 OK with an SDP answer, streams the audio file (or echoes RTP),
+// and waits for BYE or the configured duration.
+//
+// The returned handle must be kept alive for the duration of the scenario.
+// Call stop() to unregister and shut down cleanly.
+//
+//	const uas = sip.registerAndListen({
+//	  registrar:  'sip:pbx.example.com',
+//	  aor:        'sip:alice@pbx.example.com',
+//	  username:   'alice',
+//	  password:   'secret',
+//	  listenAddr: '0.0.0.0:5060',   // port advertised in REGISTER Contact
+//	  audio: { file: './examples/audio/sample.wav' },
+//	  duration:   '30s',            // max call duration (0 = wait for BYE)
+//	});
+//	sleep(600);   // keep registered for 10 minutes
+//	uas.stop();
+func (m *SIPModule) RegisterAndListen(opts map[string]interface{}) *K6RegisteredUAS {
+	cfg := sipcall.RegisteredUASConfig{
+		Codec: "PCMU",
+	}
+
+	if v, ok := opts["registrar"].(string); ok {
+		cfg.Registrar = v
+	}
+	if v, ok := opts["aor"].(string); ok {
+		cfg.AOR = v
+	}
+	if v, ok := opts["username"].(string); ok {
+		cfg.Username = v
+	}
+	if v, ok := opts["password"].(string); ok {
+		cfg.Password = v
+	}
+	if v := toInt(opts["expires"]); v > 0 {
+		cfg.Expires = v
+	}
+	if v, ok := opts["listenAddr"].(string); ok && v != "" {
+		cfg.ListenAddr = v
+	}
+	if v, ok := opts["localIP"].(string); ok && v != "" {
+		cfg.LocalIP = v
+	}
+	if v, ok := opts["transport"].(string); ok && v != "" {
+		cfg.Transport = v
+	}
+	if v := toInt(opts["maxConcurrent"]); v > 0 {
+		cfg.MaxConcurrent = v
+	}
+	if v, ok := opts["echoMode"].(bool); ok {
+		cfg.EchoMode = v
+	}
+	if audio, ok := opts["audio"].(map[string]interface{}); ok {
+		if f, ok := audio["file"].(string); ok {
+			cfg.AudioFile = f
+		}
+		if c, ok := audio["codec"].(string); ok {
+			cfg.Codec = c
+		}
+	}
+	if v, ok := opts["duration"].(string); ok {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.CallDuration = d
+		}
+	}
+	if tls, ok := opts["tls"].(map[string]interface{}); ok {
+		tlsCfg := &sipcall.TLSConfig{}
+		if v, ok := tls["cert"].(string); ok {
+			tlsCfg.CertFile = v
+		}
+		if v, ok := tls["key"].(string); ok {
+			tlsCfg.KeyFile = v
+		}
+		if v, ok := tls["ca"].(string); ok {
+			tlsCfg.CAFile = v
+		}
+		if v, ok := tls["skipVerify"].(bool); ok {
+			tlsCfg.InsecureSkipVerify = v
+		}
+		if v, ok := tls["serverName"].(string); ok {
+			tlsCfg.ServerName = v
+		}
+		cfg.TLSConfig = tlsCfg
+	} else if cfg.Transport == sipcall.TransportTLS {
+		cfg.TLSConfig = &sipcall.TLSConfig{InsecureSkipVerify: true}
+	}
+
+	uas, err := sipcall.NewRegisteredUAS(cfg)
+	if err != nil {
+		common.Throw(m.vu.Runtime(), fmt.Errorf("sip.registerAndListen: %w", err))
+	}
+
+	now := time.Now()
+	tagsAndMeta := m.vu.State().Tags.GetCurrentValues()
+	m.vu.State().Samples <- metrics.ConnectedSamples{
+		Samples: []metrics.Sample{makeSample(m.metrics.RegisterSuccess, tagsAndMeta.Tags, 1)},
+		Tags:    tagsAndMeta.Tags,
+		Time:    now,
+	}
+
+	return &K6RegisteredUAS{uas: uas}
+}
+
 // ── helpers ─────────────────────────────────────────────────────────────────
 
 // parseCfg extracts a CallConfig from a JavaScript options map.
