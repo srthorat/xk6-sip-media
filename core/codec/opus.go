@@ -1,9 +1,13 @@
+//go:build cgo
+// +build cgo
+
 package codec
 
 import (
 	"fmt"
-	"github.com/hraban/opus"
 	"sync"
+
+	"github.com/hraban/opus"
 )
 
 // Opus is the ITU-T Opus Audio Codec (RFC 6716).
