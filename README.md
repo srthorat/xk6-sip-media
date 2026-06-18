@@ -206,7 +206,29 @@ Architecture is designed for higher concurrent workloads; scale testing across m
 | GCC / Clang | system | CGO required for Opus codec |
 | [ffmpeg](https://ffmpeg.org/) | any | Generate test audio (optional) |
 
-> **macOS:** `brew install go gcc ffmpeg`  
+#### Installing Go on macOS
+
+**Option 1 — Homebrew (recommended)**
+```bash
+brew install go gcc ffmpeg
+```
+
+**Option 2 — Official installer**  
+Download the `.pkg` from [go.dev/dl](https://go.dev/dl/) → double-click → follow prompts.
+
+**Option 3 — Manual tarball (Apple Silicon)**
+```bash
+curl -L https://go.dev/dl/go1.25.4.darwin-arm64.tar.gz | sudo tar -C /usr/local -xz
+echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Verify:
+```bash
+go version
+# go version go1.25.x darwin/arm64
+```
+
 > **Ubuntu/Debian:** `apt install golang gcc ffmpeg`
 
 ---
